@@ -20,11 +20,11 @@
 
 (defun be-verbose! ()
   (setf tbnl:*show-lisp-backtraces-p* t)
-  (setf tbnl:*show-lisp-backtraces-p* t))
+  (setf tbnl:*show-lisp-errors-p* t))
 
 (defun shut-up! ()
   (setf tbnl:*show-lisp-backtraces-p* nil)
-  (setf tbnl:*show-lisp-backtraces-p* nil))
+  (setf tbnl:*show-lisp-errors-p* nil))
 
 
 ;;;; *************************************************************************

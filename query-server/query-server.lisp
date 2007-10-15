@@ -130,8 +130,8 @@ method combinations."))
   (cl-ppcre:register-groups-bind 
    (namespace local-name)
    ("{([^}]+)}(.+)" clark-name)
-    (cl-webdav:dav-node "prop" 
-   (cl-webdav::make-xmls-node :local-name local-name
+    (dav:dav-node "prop" 
+   (dav::make-xmls-node :local-name local-name
                    :namespace-uri namespace
                    :children (list value)))))
 
@@ -172,19 +172,21 @@ method combinations."))
                     `(("response"  . "DAV") NIL
                       (("href"     . "DAV") NIL ,,uri)
                       (("propstat" . "DAV")
-                       NIL
+                      NIL
                        ,@',(loop 
                               for binding in (cms-query::bindings-of context)
                               for namespace = (cms-query::namespace binding)
-                              for name = (cms-query::name binding)
-                              ;; for param = (intern (cms-query::cname binding))
-                              for param = (cms-query::cname binding)
+                              for name  = (cms-query::name binding)
+                              for param = (intern (cms-query::cname binding))
+                              ;; for param = (cms-query::cname binding)
                               ;; build a XMLS node structure
                               collect
-                              `(("prop" . "DAV") NIL
-                                ((,name . ,namespace) NIL)
-                                `,,param)))) ; <--- This gets expanded at the wrong time
-                    ))))
+                                `(("prop" . "DAV") NIL
+                               ((,name . ,namespace) NIL)
+                               #+DEPLOY`,,param
+                                 "Yers plain ol' dummy, sincerly" )))
+                      (("status" .  "DAV") NIL "HTTP/1.1 200")))) ; <-- Wrong expansion, we need a komma here!
+    ))
 
 #-DEPLOYMENT
 (defun mockup-handler ()
@@ -192,37 +194,38 @@ method combinations."))
 
   (setf
    (header-out "Server") "CMS-Query-Server"
+   (header-out "X-Handled-By") "mokup-handler"
    (content-type) "text/xml; charset=utf-8"
    (return-code) +http-multi-status+)
 
   ;;; Read the query from the POST data ...
   ;;; FIXME: this (setf (tbnl:reply-external-format) "UTF-8") doesn't
   ;;; work.
-  (setf (header-out "X-Handled-By") "mokup-handler")
+
   (let* ((*read-eval* NIL)
          (query    (cms-query::compile-query  (read (tbnl:raw-post-data  :want-stream t))))
          (context  (make-instance 'cms-query::compiler-context))
          sql-query dummy-tuple formatter
-         (response (tbnl:send-headers)))
+         ;; (response (tbnl:send-headers))
+         )
     
     ;; Setup the compiler context
-    (scan-opcode query context)
+    (cms-query::scan-opcode query context)
     ;; Now we should have collected all bindings as well as all table
     ;; names, hence we can compile a result formatter
     (setf formatter (compile-webdav-formatter query context))
     
     ;; Create a dummy value list
-    (setf dummy-tuple (loop for val from 1 to (length (cms-query::bindings context))
+    (setf dummy-tuple (loop for val from 1 to (length (cms-query::bindings-of context))
                          collect (format NIL "value-~a" val)))
     
-    (loop for resource from 1 to 100
-       collect (apply formatter (format NIL "/cms/work/2007/resouce~A" resource) dummy-tuple)
+    (loop for resource from 1 to (random 256)
+       collect (apply formatter (format NIL "/cms/work/2007/resouce-~A" resource) dummy-tuple)
        into result 
-       finally (progn (format response "result is ~A" result) 
-                      (write-sequence 
-                       (cl-webdav:serialize-xmls-node (apply #'cl-webdav:dav-node "multistatus" result))
-                       response))
-         (force-output response))))
+       finally (return  (sb-ext:octets-to-string 
+                         (cl-webdav:serialize-xmls-node (apply #'cl-webdav:dav-node "multistatus" result))
+                         :external-format :utf-8))
+         )))
 
 #-DEPLOYMENT
 (defparameter +mock-props+
