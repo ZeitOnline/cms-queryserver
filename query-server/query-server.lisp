@@ -124,6 +124,7 @@ method combinations."))
    ("{([^}]+)}(.+)" clark-name)
     (list namespace local-name)))
 
+(declaim (inline make-prop-node))
 (defun make-prop-node (clark-name value)
   "Generate a XMLS node for the property with 
    the given Clark name and value"
@@ -136,12 +137,13 @@ method combinations."))
                    :children (list value)))))
 
 ;;; -->
+(declaim (inline make-resource-node))
 (defun make-resource-node (href status)
   "Generate a XMLS node for the resouce with URI href and status code status"
   (cl-webdav:dav-node "response"
                       (list )))
 
-;;; FIXES: get rid of package names
+;;; FIXME: get rid of package names
 
 (defun construct-xml-node (binding)
   (let ((name (cms-query::name binding))
@@ -155,7 +157,7 @@ method combinations."))
          (loop for binding in (cms-query::bindings-of context)
             ;; build a XMLS node structure
             collect
-              `(("prop" . "DAV") NIL
+              `(("prop" . "DAV:") NIL
                 ((,(cms-query::name binding) . ,(cms-query::namespace binding)) NIL
                  ,(cms-query::cname binding)))))
     
@@ -169,9 +171,9 @@ method combinations."))
 
     ;; This is the code we emmit
     (compile NIL `(lambda (,uri ,@fun-args)
-                    `(("response"  . "DAV") NIL
-                      (("href"     . "DAV") NIL ,,uri)
-                      (("propstat" . "DAV")
+                    `(("response"  . "DAV:") NIL
+                      (("href"     . "DAV:") NIL ,,uri)
+                      (("propstat" . "DAV:")
                       NIL
                        ,@',(loop 
                               for binding in (cms-query::bindings-of context)
@@ -181,11 +183,11 @@ method combinations."))
                               ;; for param = (cms-query::cname binding)
                               ;; build a XMLS node structure
                               collect
-                                `(("prop" . "DAV") NIL
+                                `(("prop" . "DAV:") NIL
                                ((,name . ,namespace) NIL)
                                #+DEPLOY`,,param
                                  "Yers plain ol' dummy, sincerly" )))
-                      (("status" .  "DAV") NIL "HTTP/1.1 200")))) ; <-- Wrong expansion, we need a komma here!
+                      (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) ; <-- Wrong expansion, we need a komma here!
     ))
 
 #-DEPLOYMENT
