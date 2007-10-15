@@ -184,10 +184,10 @@ method combinations."))
                               ;; build a XMLS node structure
                               collect
                                 `(("prop" . "DAV:") NIL
-                               ((,name . ,namespace) NIL)
-                               #+DEPLOY`,,param
-                                 "Yers plain ol' dummy, sincerly" )))
-                      (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) ; <-- Wrong expansion, we need a komma here!
+                               ((,name . ,namespace) NIL
+                                #+DEPLOY`,,param) ; <-- Wrong expansion, we need a komma more here!
+                                  "Yers plain ol' dummy, sincerly" )))
+                      (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) 
     ))
 
 #-DEPLOYMENT
