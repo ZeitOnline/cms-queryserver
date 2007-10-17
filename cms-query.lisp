@@ -176,8 +176,12 @@
 (defun lookup-binding (name compiler)
   )
 
+;;; Add a table the compiler context and return the newly created table
+;;; name.
 (defun add-table (compiler-context)
-  (push (format NIL "tmp_~d" (length (tables-of compiler-context)))  (tables-of compiler-context)))
+  (let ((name (format NIL "tmp_~d" (length (tables-of compiler-context)))))
+    (push name (tables-of compiler-context))
+    name))
 
 (defun make-qualified-token (table field)
   (format NIL "~A.~A" table field))
@@ -235,6 +239,42 @@
           ( *parent-opcode* ,cname))
      ,@body
      ,cname))
+
+
+#|
+
+ SELECT <p-list> FROM <table-aliases> <table-chain>
+
+where <p-list>  is a list of (uri <qualified field names>+)
+and <table-chain> a sequence of  (:select <preds> <binders>)
+joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table-name <right>) uri)) 
+|#
+
+;;; collect-p-list is a helper function to generate a projection list,
+;;; i.e. a list of (qualified) fields to be returned by a sql select
+;;; query.
+
+(defgeneric collect-p-list (opcode context &key &allow-other-keys)
+  (:method ( opcode context &key &allow-other-keys) NIL))
+
+
+(defmethod collect-p-list ((opcode binding-constraint) context &key parent &allow-other-keys)
+  `(,(make-symbol (format NIL "~a.~a" (table-name-of parent) (cname opcode)))))
+
+(defmethod collect-p-list :before (opcode context &key parent &allow-other-keys)
+  (warn "Collecting p-list for ~A" opcode))
+
+(defmethod collect-p-list ((opcode set-intersection) context &key &allow-other-keys)
+  (loop for oc in (branches-of opcode)
+     when (collect-p-list oc context :parent opcode) append it))
+
+(defmethod compile-sql-query (query context)
+  ""
+  (let ((p-list )
+        (table-aliases)
+        (table-chain))
+
+    (s-sql:sql-compile `(:select ,@p-list :from ,@table-aliases))))
 
 ;;; compile-query:
 ;;; takes an (s-expression formated) query and returns an AST

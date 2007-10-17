@@ -26,6 +26,8 @@
   (setf tbnl:*show-lisp-backtraces-p* nil)
   (setf tbnl:*show-lisp-errors-p* nil))
 
+(defmacro defformatter (name &body body)
+  `(setf (symbol-function ',name) ,@body))
 
 ;;;; *************************************************************************
 ;;;; This program is free software; you can redistribute it and/or modify

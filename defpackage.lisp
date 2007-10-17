@@ -1,5 +1,5 @@
 (defpackage #:cms-query 
-  (:use :cl)
+  (:use :cl :s-sql :hunchentoot)
   (:export 
    #:*ns-map*
    #:find-resources
@@ -7,5 +7,5 @@
    #:run-query))
 
 (defpackage #:cms-query-user 
-  (:use :cl :cms-query :clsql)
+  (:use :cl :cms-query)
   (:nicknames :cms))

@@ -12,6 +12,13 @@
   :long-description "Lisp implementation of a query interface to the CMS facts DB"
 
   :serial t
-  :depends-on (:clsql-postgresql)
+  :depends-on (:clsql-postgresql :s-sql)
   :components ((:file "defpackage")
-	       (:file "cms-query")))
+	       (:file "cms-query")
+               (:module "query-server"
+                        :depends-on (:hunchentoot :cl-webdav :cl-who)
+                        :components ((:file "defpackage")
+                                     (:file "query-server")
+                                     (:file "db-pool")
+                                     (:file "utils")))))
+

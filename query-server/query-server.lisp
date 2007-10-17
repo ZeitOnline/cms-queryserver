@@ -16,7 +16,7 @@
 ;;;; *************************************************************************
 
 
-(in-package :cms-query-server)
+(in-package :cms-query)
 
 (defvar *server*  NIL)
 (defvar *port*    9876)
@@ -175,7 +175,8 @@ method combinations."))
                       (("href"     . "DAV:") NIL ,,uri)
                       (("propstat" . "DAV:")
                       NIL
-                       ,@',(loop 
+;                       ,',@',(loop 
+                       ,,@(loop 
                               for binding in (cms-query::bindings-of context)
                               for namespace = (cms-query::namespace binding)
                               for name  = (cms-query::name binding)
@@ -183,12 +184,47 @@ method combinations."))
                               ;; for param = (cms-query::cname binding)
                               ;; build a XMLS node structure
                               collect
-                                `(("prop" . "DAV:") NIL
-                               ((,name . ,namespace) NIL
-                                #+DEPLOY`,,param ; <-- Wrong expansion, we need a komma more here!
+                                 `(("prop" . "DAV:") NIL
+                                   ((,name . ,namespace) NIL
+                                    ,`,param ; <-- Wrong expansion, we need a komma more here!
                                 "Yers plain ol' dummy, sincerly") )))
                       (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) 
     ))
+
+
+
+#| FILTER
+ (:select uri 
+         :from (:as facts <table>) 
+         :where (:and (:= namespace <ns>) 
+                      (:= name <name>)
+                      (:= value <value>)))
+|#
+
+#| BINDER
+ (:select uri value 
+         :from (:as facts <table>) 
+         :where (:and (:= namespace <ns>) 
+                      (:= name <name>)
+                      (:= value <value>)))
+|#
+
+(defgeneric compile-sql (opcode context))
+
+(defmethod compile-sql ((opcode cms-query::binding-constraint) context)
+  (with-slots (cms::namespace cms::name) opcode
+    `(:select uri value
+              :from (:as facts <table>) 
+              :where (:and (:= namespace ,cms::namespace) 
+                           (:= name ,cms::name)))))
+
+(defmethod compile-sql ((opcode cms-query::filter-constraint) context)
+  (with-slots (cms::namespace cms::name cms::value) opcode
+    `(:select uri 
+              :from (:as facts <table>) 
+              :where (:and (:= namespace ,cms::namespace) 
+                           (:= name ,cms::name)
+                           (:= value ,cms::value)))))
 
 #-DEPLOYMENT
 (defun mockup-handler ()
@@ -221,8 +257,8 @@ method combinations."))
     (setf dummy-tuple (loop for val from 1 to (length (cms-query::bindings-of context))
                          collect (format NIL "value-~a" val)))
     
-    (loop for resource from 1 to (random 256)
-       collect (apply formatter (format NIL "/cms/work/2007/resouce-~A" resource) dummy-tuple)
+    (loop for resource from 1 to 24 ; or, (random 256) for that matter ...
+       collect (apply formatter (format NIL "/cms/work/2007/resource-~A" resource) dummy-tuple)
        into result 
        finally (return  (sb-ext:octets-to-string 
                          (cl-webdav:serialize-xmls-node (apply #'cl-webdav:dav-node "multistatus" result))
