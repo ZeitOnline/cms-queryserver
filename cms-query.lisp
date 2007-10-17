@@ -268,14 +268,6 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   (loop for oc in (branches-of opcode)
      when (collect-p-list oc context :parent opcode) append it))
 
-(defmethod compile-sql-query (query context)
-  ""
-  (let ((p-list )
-        (table-aliases)
-        (table-chain))
-
-    (s-sql:sql-compile `(:select ,@p-list :from ,@table-aliases))))
-
 ;;; compile-query:
 ;;; takes an (s-expression formated) query and returns an AST
 (defun compile-query (spec)
@@ -294,9 +286,6 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
     (:bind (apply  #'make-binding-constraint (opargs spec)))
     (:between (error 'cms-query-error :explanation "OPCODE :between not yet supported!"))))
 
-(defgeneric compile-sql (ast context)
-  (:documentation "Compile a pre-comiled query into a corresponding SQL qwery."))
-
 (defgeneric scan-opcode (opcode context))
 
 (defmethod scan-opcode (opcode context)
@@ -310,16 +299,6 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 ;;; formatter as well as the SQL query
 (defmethod scan-opcode ((op binding-constraint) (context compiler-context))
   (pushnew op (bindings-of context)))
-
-(defmethod compile-sql (ast context)
-  (scan-opcode ast context)
-  (with-output-to-string (sql)
-    ;;; Walk the AST to collect binding information
-    
-    ;;; Emmit SELECT stanza
-    (format sql "SELECT foo FROM")
-
-    sql))
 
 #-DEPLOYMENT
 (defun test-query (ast)

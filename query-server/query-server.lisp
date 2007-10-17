@@ -202,29 +202,30 @@ method combinations."))
 |#
 
 #| BINDER
- (:select uri value 
+ (:select uri value
          :from (:as facts <table>) 
          :where (:and (:= namespace <ns>) 
                       (:= name <name>)
                       (:= value <value>)))
 |#
 
-(defgeneric compile-sql (opcode context))
+(defgeneric compile-sql (opcode context)
+  (:documentation "Compile a pre-comiled query into a corresponding SQL qwery."))
 
-(defmethod compile-sql ((opcode cms-query::binding-constraint) context)
-  (with-slots (cms::namespace cms::name) opcode
+(defmethod compile-sql ((opcode binding-constraint) context)
+  (with-slots (namespace name) opcode
     `(:select uri value
               :from (:as facts <table>) 
-              :where (:and (:= namespace ,cms::namespace) 
-                           (:= name ,cms::name)))))
+              :where (:and (:= namespace ,namespace) 
+                           (:= name ,name)))))
 
 (defmethod compile-sql ((opcode cms-query::filter-constraint) context)
-  (with-slots (cms::namespace cms::name cms::value) opcode
+  (with-slots (namespace name value) opcode
     `(:select uri 
               :from (:as facts <table>) 
-              :where (:and (:= namespace ,cms::namespace) 
-                           (:= name ,cms::name)
-                           (:= value ,cms::value)))))
+              :where (:and (:= namespace ,namespace) 
+                           (:= name ,name)
+                           (:= value ,value)))))
 
 #-DEPLOYMENT
 (defun mockup-handler ()

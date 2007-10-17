@@ -1,5 +1,5 @@
 (defpackage #:cms-query 
-  (:use :cl :s-sql :hunchentoot)
+  (:use :cl :s-sql :hunchentoot :cl-who)
   (:export 
    #:*ns-map*
    #:find-resources
