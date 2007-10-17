@@ -99,7 +99,7 @@
   ((cname     :initarg :cname :accessor cname)
    (name      :initarg :name :accessor name)
    (namespace :initarg :namespace :accessor namespace))
- (:documentation ""))
+  (:documentation ""))
 
 (defmethod initialize-instance :after ((self constraint) &key &allow-other-keys)
   (setf (cname self) (make-clark-name (namespace self) (name self))))
@@ -165,8 +165,22 @@
 (defclass compiler-context ()
   ((stack    :accessor opcode-stack :initform ())
    (tables   :accessor tables-of    :initform ())
-   (bindings :accessor bindings-of  :initform ()))
+   (bindings :accessor bindings-of  :initform ())
+   (binding-names :initform (make-hash-table)))
   (:documentation ""))
+
+;;; Each binding needs a unique name to be used as a table name during
+;;; sql compilation.
+(defun add-binding (context binding)
+  (with-slots (binding-names) context
+    (let ((name (gethash binding binding-names)))
+      (if name name
+          (setf (gethash binding binding-names) (add-table context))))))
+
+(defun get-binding-name (context binding)
+  (with-slots (binding-names) context
+    (or (gethash binding binding-names)
+        (error "Severe compiler error"))))
 
 (defun make-clark-name (namespace name)
   (declare (type (namespace string))
@@ -259,7 +273,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 
 (defmethod collect-p-list ((opcode binding-constraint) context &key parent &allow-other-keys)
-  `(,(make-symbol (format NIL "~a.~a" (table-name-of parent) (cname opcode)))))
+  `(,(make-symbol (format NIL "~a.value" (get-binding-name context opcode)))))
 
 (defmethod collect-p-list :before (opcode context &key parent &allow-other-keys)
   (warn "Collecting p-list for ~A" opcode))
@@ -298,11 +312,10 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 ;;; Here we collect binding information needed to generate the result
 ;;; formatter as well as the SQL query
 (defmethod scan-opcode ((op binding-constraint) (context compiler-context))
-  (pushnew op (bindings-of context)))
+  (pushnew op (bindings-of context))
+  (add-binding context op))
 
-#-DEPLOYMENT
-(defun test-query (ast)
-  (compile-sql ast (make-instance 'compiler-context)))
+
 
 (defun build-query (qspec)
   (let ((filters NIL)

@@ -210,7 +210,7 @@ method combinations."))
 |#
 
 (defgeneric compile-sql (opcode context)
-  (:documentation "Compile a pre-comiled query into a corresponding SQL qwery."))
+  (:documentation "Compile a pre-comiled query into a corresponding SQL query."))
 
 (defmethod compile-sql ((opcode binding-constraint) context)
   (with-slots (namespace name) opcode
@@ -219,13 +219,18 @@ method combinations."))
               :where (:and (:= namespace ,namespace) 
                            (:= name ,name)))))
 
-(defmethod compile-sql ((opcode cms-query::filter-constraint) context)
+(defmethod compile-sql ((opcode filter-constraint) context)
   (with-slots (namespace name value) opcode
     `(:select uri 
               :from (:as facts <table>) 
               :where (:and (:= namespace ,namespace) 
                            (:= name ,name)
                            (:= value ,value)))))
+
+;;; join the sub-statements  
+(defmethod compile-sql ((opcode set-intersection) context)
+  (let ((p-list (collect-p-list opcode)))
+      `(:select ,@p-list :from )))
 
 #-DEPLOYMENT
 (defun mockup-handler ()
