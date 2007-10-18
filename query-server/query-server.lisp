@@ -209,28 +209,53 @@ method combinations."))
                       (:= value <value>)))
 |#
 
+#|
+  (:select 'foo 'bar 'baz :from 
+  (:as (:select 'foo :from 'x :where 'x) 'tmp1)
+    :inner-join 
+  (:as (:select 'bar :from 'x :where 'x) 'tmp2) :on (:='tmp1.id 'tmp2.id)
+    :inner-join 
+  (:as (:select 'baz :from 'x :where 'x) 'tmp3) :on (:='tmp2.id 'tmp3.id))
+|#
+
+(defun generate-sql (query context)
+  "..."
+  (assert (typep query 'set-operation))
+  `(:Select (:dot ,(get-predicate-name context (first (bindings-of context))) uri) 
+            ,@(collect-p-list query context) 
+            :from ,@(compile-sql query context)) )
+
 (defgeneric compile-sql (opcode context)
   (:documentation "Compile a pre-comiled query into a corresponding SQL query."))
 
 (defmethod compile-sql ((opcode binding-constraint) context)
   (with-slots (namespace name) opcode
-    `(:select uri value
-              :from (:as facts <table>) 
-              :where (:and (:= namespace ,namespace) 
-                           (:= name ,name)))))
+    `(:as (:select uri value
+                :from facts 
+                :where (:and (:= namespace ,namespace) 
+                             (:= name ,name))) ,(get-predicate-name context opcode)) ))
 
 (defmethod compile-sql ((opcode filter-constraint) context)
   (with-slots (namespace name value) opcode
-    `(:select uri 
-              :from (:as facts <table>) 
-              :where (:and (:= namespace ,namespace) 
-                           (:= name ,name)
-                           (:= value ,value)))))
+    `(:as (:select uri 
+                :from facts 
+                :where (:and (:= namespace ,namespace) 
+                             (:= name ,name)
+                             (:= value ,value))) ,(get-predicate-name context opcode)) ))
+
 
 ;;; join the sub-statements  
 (defmethod compile-sql ((opcode set-intersection) context)
-  (let ((p-list (collect-p-list opcode)))
-      `(:select ,@p-list :from )))
+  (loop 
+     with branches = (coerce (branches-of opcode) 'vector)
+     with length   = (length branches) 
+       
+     for b across branches and pos from 0
+     collect (compile-sql b context)
+
+     when (> pos 0) append `(:on (:= (:dot ,(get-predicate-name context (aref branches (- pos 1))) uri) 
+                                     (:dot ,(get-predicate-name context (aref branches pos)) uri)))
+     when (< pos (- length 1)) append '(:inner-join)))
 
 #-DEPLOYMENT
 (defun mockup-handler ()

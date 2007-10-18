@@ -166,21 +166,21 @@
   ((stack    :accessor opcode-stack :initform ())
    (tables   :accessor tables-of    :initform ())
    (bindings :accessor bindings-of  :initform ())
-   (binding-names :initform (make-hash-table)))
+   (predicate-names :initform (make-hash-table)))
   (:documentation ""))
 
 ;;; Each binding needs a unique name to be used as a table name during
 ;;; sql compilation.
-(defun add-binding (context binding)
-  (with-slots (binding-names) context
-    (let ((name (gethash binding binding-names)))
+(defun add-predicate-name (context predicate)
+  (with-slots (predicate-names) context
+    (let ((name (gethash predicate predicate-names)))
       (if name name
-          (setf (gethash binding binding-names) (add-table context))))))
+          (setf (gethash predicate predicate-names) (make-symbol  (add-table context)))))))
 
-(defun get-binding-name (context binding)
-  (with-slots (binding-names) context
-    (or (gethash binding binding-names)
-        (error "Severe compiler error"))))
+(defun get-predicate-name (context predicate)
+  (with-slots (predicate-names) context
+    (or (gethash predicate predicate-names)
+        (error "Severe compiler error ~A" predicate))))
 
 (defun make-clark-name (namespace name)
   (declare (type (namespace string))
@@ -273,10 +273,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 
 (defmethod collect-p-list ((opcode binding-constraint) context &key parent &allow-other-keys)
-  `(,(make-symbol (format NIL "~a.value" (get-binding-name context opcode)))))
-
-(defmethod collect-p-list :before (opcode context &key parent &allow-other-keys)
-  (warn "Collecting p-list for ~A" opcode))
+  `(,(make-symbol (format NIL "~a.value" (get-predicate-name context opcode)))))
 
 (defmethod collect-p-list ((opcode set-intersection) context &key &allow-other-keys)
   (loop for oc in (branches-of opcode)
@@ -309,11 +306,14 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   (setf (table-name-of op) (add-table context))
   (loop for opcode in (branches-of op) do (scan-opcode opcode context)))
 
+(defmethod scan-opcode ((op constraint) (context compiler-context))
+  (add-predicate-name context op))
+
 ;;; Here we collect binding information needed to generate the result
 ;;; formatter as well as the SQL query
 (defmethod scan-opcode ((op binding-constraint) (context compiler-context))
   (pushnew op (bindings-of context))
-  (add-binding context op))
+  (call-next-method))
 
 
 
