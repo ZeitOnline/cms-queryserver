@@ -23,7 +23,7 @@
       :accessor resources-of
       :initform ())
    (res-count
-      :accessor res-count-of)
+      :accessor res-count-of :initform 0)
    (min-resources
       :accessor min-resources-of
       :initarg  :min-resources)
@@ -53,7 +53,7 @@
 
 (defgeneric release-resource (resource-pool resource))
 
-(defgeneric dump-resource (resource-pool))
+(defgeneric dump-resource (resource-pool resource))
 
 (defgeneric clear-pool (resource-pool))
 
@@ -65,7 +65,7 @@
 
 (defmethod initialize-instance :after ((pool resource-pool) &key &allow-other-keys)
   ;;; Create the mutex
-  (setf (pool-mutex pool) (tbnl::make-lock "foobar"))
+  (setf (pool-mutex pool) (tbnl::make-lock (symbol-name (gensym "Database Pool Lock "))))
   ;;; Initialize the resource pool
   (tbnl::with-lock ((pool-mutex pool)) 
     (dotimes (i (min-resources-of pool))
@@ -85,20 +85,26 @@
   (let ((res-count (length (resources-of pool)))
         (min-count  (min-resources-of pool)))
     (when (< res-count min-count)
-      (warn "Pool underrun! Increasing thew wee")
+      (warn "Pool underrun! Increasing the wee")
       (dotimes (i (- min-count res-count))
         (push (clsql:connect (userdata-of pool) :if-exists :new :make-default NIL)
               (resources-of pool))
         (incf (res-count-of pool))))))
 
-(defmethod release-resource (resource (pool database-pool))
+(defmethod release-resource ((pool database-pool) resource)
   (tbnl::with-lock ((pool-mutex pool))
+    (unless (member resource (resources-of pool)))
     (push resource (resources-of pool)))
   (values))
 
+(defmethod clear-pool ((pool database-pool))
+  (tbnl::with-lock ((pool-mutex pool))
+    (loop for resource in (resources-of pool) do (dump-resource pool resource))
+    (values)))
+
 ;;; TODO
 ;;; 
-;;; * We should'nt call clsql:connect directly baut rather call the factory
+;;; * We should'nt call clsql:connect directly but rather call the factory
 ;;;   closure.
 
  

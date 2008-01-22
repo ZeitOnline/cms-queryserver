@@ -161,7 +161,22 @@
 		 :from from
 		 :to to))
 
+(defclass member-constraint (constraint)
+  ((values :initarg :values :accessor values-of))
+  (:documentation ""))
 
+(defun make-member-constraint (namespace name &rest values)
+  (warn "Selecting in ~A" values)
+  (make-instance 'member-constraint 
+                 :namespace namespace 
+                 :name name 
+                 :values values))
+
+
+(defmethod initialize-instance :after ((self member-constraint) &key &allow-other-keys)
+  (with-slots (namespace name values) self
+    (warn "NS ~a~&NAME ~a~&VALUES ~A" namespace name values)))
+ 
 (defclass compiler-context ()
   ((stack    :accessor opcode-stack :initform ())
    (tables   :accessor tables-of    :initform ())
@@ -200,44 +215,6 @@
 (defun make-qualified-token (table field)
   (format NIL "~A.~A" table field))
 
-(defgeneric render-query (opcode context &optional stream)
-  (:method ((opcode opcode) context &optional stream)
-    (error "~&Cannot compile OP-Code ~A to SQL" (class-of opcode))))
-
-(defmethod render-query ((sop set-union) (context compiler-context) &optional (stream *standard-output*))
- ;;; Here we _assume_ the all subtrees can be unified!
- ;;; We should probably write an assertion for that.
-  (format nil "~{~A~^UNION ~}" (mapcar #'(lambda (st) (render-query st context)) (branches-of sop))))
-
-(defmethod render-query ((sop set-intersection) (context compiler-context) &optional (stream *standard-output*))
-  (with-output-to-string (s)
-  (loop FOR (this other) ON (branches-of sop)
-       WHEN other DO (format s "~A  INNER JOIN ON (~A = ~A) ~%" 
-			     (render-query this context)
-			     (make-qualified-token (table-name-of this) "uri")
-			     (make-qualified-token (table-name-of other) "uri"))
-       ELSE DO (format s "~A" (render-query this context)))))
-
-(defmethod render-query ((constraint filter-constraint) (context compiler-context) &optional (stream *standard-output*))
-  (format nil "(SELECT uri, namespace, name FROM facts where ~
- namespace = '~A' AND   name = '~A'  AND value = '~A') "  ; AS ~A "
-	  (namespace constraint) (name constraint)
-	  (value constraint) "foo";(cname constraint)
-	  ))
-
-(defmethod render-query ((constraint binding-constraint) (context compiler-context) &optional (stream *standard-output*))
-  (format nil "(SELECT uri, namespace, name, value FROM facts where ~
- namespace = '~A' AND   name = '~A') " ;AS ~A "
-	  (namespace constraint) (name constraint) "bar";(cname constraint)
-	  ))
-
-(defmethod render-query ((constraint range-constraint) (context compiler-context) &optional (stream *standard-output*))
-  (format stream "(SELECT uri, namespace, name FROM facts where ~
- namespace = '~A' AND   name = '~A'  AND value >= ~A AND value <= ~A) " ;AS ~A "
-	  (namespace constraint) (name constraint)
-	  (lower-bound constraint) (upper-bound constraint) (cname constraint)))
-
-
 (defun opcode (thing)
   (let ((code (first thing)))
     (unless (keywordp code)
@@ -247,13 +224,11 @@
 (defun opargs (thing)
   (rest thing))
 
-
 (defmacro with-op-class (cname &body body)
   `(let* ((,cname (make-instance ',cname))
           ( *parent-opcode* ,cname))
      ,@body
      ,cname))
-
 
 #|
 
@@ -281,20 +256,28 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 ;;; compile-query:
 ;;; takes an (s-expression formated) query and returns an AST
-(defun compile-query (spec)
+(defun compile-query (query)
   ""
-  (ecase (opcode spec)
+  ;;; Some simple error checking ...
+  ;;; Technically speaking keywordp is wrong but it eases development
+  ;;; for now.
+  (assert (and (listp query) (keywordp (car query))) (query)
+          (make-condition 'cms-malformed-query 
+                          :explanation "Your query doesn't seem to be a valid query"))
+
+  (ecase (opcode query)
     (:and (with-op-class set-intersection
 	    (setf (branches-of set-intersection)
-		  (loop for node in (opargs spec) collect (compile-query node)))))
+		  (loop for node in (opargs query) collect (compile-query node)))))
     (:or (with-op-class set-union
 	    (setf (branches-of set-union)
-		  (loop for node in (opargs spec) collect (compile-query node)))))
-    (:is (apply #'make-filter-constraint := (opargs spec)))
-    (:eq (apply #'make-filter-constraint := (opargs spec)))
-    (:gt (apply #'make-filter-constraint :> (opargs spec)))
-    (:lt (apply #'make-filter-constraint :< (opargs spec)))
-    (:bind (apply  #'make-binding-constraint (opargs spec)))
+		  (loop for node in (opargs query) collect (compile-query node)))))
+    (:is (apply #'make-filter-constraint := (opargs query)))
+    (:eq (apply #'make-filter-constraint := (opargs query)))
+    (:gt (apply #'make-filter-constraint :> (opargs query)))
+    (:lt (apply #'make-filter-constraint :< (opargs query)))
+    (:bind (apply  #'make-binding-constraint (opargs query)))
+    (:member-p (apply  #'make-member-constraint (opargs query)))
     (:between (error 'cms-query-error :explanation "OPCODE :between not yet supported!"))))
 
 (defgeneric scan-opcode (opcode context))
@@ -314,8 +297,6 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 (defmethod scan-opcode ((op binding-constraint) (context compiler-context))
   (pushnew op (bindings-of context))
   (call-next-method))
-
-
 
 (defun build-query (qspec)
   (let ((filters NIL)

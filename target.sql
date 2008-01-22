@@ -1,6 +1,6 @@
 -- This is a sample query similar to the ones we want to generate
 
-SELECT 
+SELECT DISTINCT 
        tmp_1.uri,                                       -- This is the p-list (short for projection-list)
        tmp_2.VALUE AS "{http://foo/founz}/ressort",     -- this list will be created from all binders
        tmp_3.VALUE AS "{http://foo/founz}/author"       --
@@ -17,6 +17,11 @@ INNER JOIN
         FROM facts 
         WHERE namespace = 'http://namespaces.zeit.de/CMS/document' 
         AND   name = 'volume'  AND value = '32') AS tmp_0  ON (tmp_1.URI=tmp_0.URI)  
+INNER JOIN
+     (SELECT uri, namespace, name
+        FROM facts
+        WHERE namespace = 'http://namespaces.zeit.de/CMS/workflow'
+        AND   name = 'status'  AND value = 'OK') AS tmp_4  ON (tmp_4.URI=tmp_0.URI)
 INNER JOIN
   -- A binder 
       (SELECT uri, namespace, name, value 

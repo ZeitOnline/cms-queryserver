@@ -23,6 +23,7 @@
 (defvar *verbose* T)
 (defvar *address* "localhost")
 (defvar *last-query* NIL)
+(defvar *database-pool* NIL "Default database connection pool")
 
 (defun  handle-search-request ()
   "Returns a WebDAV compliant XML response"
@@ -30,11 +31,15 @@
   (setf (tbnl:content-type) "text/xml; charset=UTF-8")
 ;FIXME: (setf (tbnl:reply-external-format) "UTF-8")
   (let* ((*read-eval* NIL)
-         (request-query (read (tbnl:raw-post-data  :want-stream t))))
+         (request-query (tbnl:raw-post-data)))
     (setf *last-query* request-query)
-    (format NIL "~&<!--~&~S~%-->~%~S~%" request-query (cms-query::find-resources request-query))
-;; Insert WebDAV response
-    (serialize-xmls-node (apply #'dav-node "multistatus" ""))))
+
+    (let* ((context (make-instance 'compiler-context))
+           (query   (compile-query (read-from-string  request-query)))
+           (sql     (build-query (scan-opcode query context))))
+      ;; Insert WebDAV response
+      (format NIL "~&<!--~&~A~%-->~%~S~% " sql  
+              (dav:serialize-xmls-node (apply #'dav:dav-node (list "multistatus" "")))))))
 
 (defgeneric handle-interactive-request ()
   (:documentation "Presents a HTML input form for interactive queries.
@@ -84,7 +89,7 @@ method combinations."))
 (defmethod cms-query-server-dispatch (request)
   "Only handle SEARCH method requests"
   (ecase (tbnl:request-method request)
-    (:search 'mockup-handler)
+    (:search 'handle-search-request)
     (:post   'mockup-handler)
     (:get    'mockup-handler)))
 
@@ -92,6 +97,8 @@ method combinations."))
 
 (defun start (&key (address *address*) (port *port*) (verbose-p *verbose*))
   (prog1 
+      ;; FIXME: we need to set up a database connection pool somewhere
+      ;; arround here
       (setf *server*  (tbnl:start-server 
                        :address address :port port 
                        :dispatch-table (list #'cms-query-server-dispatch)
@@ -105,6 +112,7 @@ method combinations."))
   "Stop the CMS Query Server."
   (if server
       (progn 
+        ;; FIXME: destroy the database connection pool here
         (tbnl:stop-server server)
         (setf *server* nil))
       (warn "Server not running!")))
@@ -238,11 +246,18 @@ method combinations."))
 (defmethod compile-sql ((opcode filter-constraint) context)
   (with-slots (namespace name value) opcode
     `(:as (:select uri 
-                :from facts 
-                :where (:and (:= namespace ,namespace) 
-                             (:= name ,name)
-                             (:= value ,value))) ,(get-predicate-name context opcode)) ))
+                   :from facts 
+                   :where (:and (:= namespace ,namespace) 
+                                (:= name ,name)
+                                (:= value ,value))) ,(get-predicate-name context opcode)) ))
 
+(defmethod compile-sql ((opcode member-constraint) context)
+  (with-slots (namespace name values) opcode
+    `(as (:select uri
+                  :from facts
+                   :where (:and (:= namespace ,namespace) 
+                                (:= name ,name)
+                                (:in value ,@values))) ,(get-predicate-name context opcode)) ))
 
 ;;; join the sub-statements  
 (defmethod compile-sql ((opcode set-intersection) context)
@@ -256,6 +271,7 @@ method combinations."))
      when (> pos 0) append `(:on (:= (:dot ,(get-predicate-name context (aref branches (- pos 1))) uri) 
                                      (:dot ,(get-predicate-name context (aref branches pos)) uri)))
      when (< pos (- length 1)) append '(:inner-join)))
+
 
 #-DEPLOYMENT
 (defun mockup-handler ()
