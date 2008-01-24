@@ -217,7 +217,7 @@ a WebDAV propget response."
       (setf query (read (tbnl:raw-post-data  :want-stream t))))
     
     (setf sql-query (sql-compile (compile-sql (compile-query query))))
-    (warn "SQL: ~sql-query" sql-query)
+    (warn "SQL: ~A" (printc  sql-query))
 
     (with-output-to-string (s)
       (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t)
@@ -229,9 +229,8 @@ a WebDAV propget response."
                          fname in (rest fields)
                          do (destructuring-bind (ns name) (clark-to-ns-name fname)
                            (format s "~&<~A xmlns='~a'>~a</~A>" name ns value name)))
-                      (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:response>"))
-        
-             )))))
+                      (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:response>")))
+        (format s "</D:multistatus>")))))
 
   
 
