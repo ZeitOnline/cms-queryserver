@@ -225,12 +225,12 @@ a WebDAV propget response."
         (format s "<?xml version='1.0' encoding='utf-8' ?>
 <D:multistatus xmlns:D='DAV:'>~%")
         (loop for tuple in tuples
-           do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:prop>" (first tuple))
+           do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:propstat>~%<D:prop>" (first tuple))
                       (loop for value in (rest tuple) and
                          fname in (rest fields)
                          do (destructuring-bind (ns name) (clark-to-ns-name fname)
                            (format s "~&<~A xmlns='~a'>~a</~A>" name ns value name)))
-                      (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:response>")))
+                      (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%<D:propstat>~%</D:response>")))
         (format s "</D:multistatus>")))))
 
   
