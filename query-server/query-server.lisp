@@ -217,7 +217,8 @@ a WebDAV propget response."
       (setf query (read (tbnl:raw-post-data  :want-stream t))))
     
     (setf sql-query (sql-compile (compile-sql (compile-query query))))
-    (warn "SQL: ~A" (printc  sql-query))
+    (warn "SQL: ~A" sql-query)
+    (setf (reply-external-format)  (flex:make-external-format :utf-8 :eol-style :lf))
 
     (with-output-to-string (s)
       (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t)
