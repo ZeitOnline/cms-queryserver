@@ -14,6 +14,7 @@
   :serial t
   :depends-on (:clsql-postgresql :s-sql :hunchentoot :cl-webdav :cl-who)
   :components ((:file "defpackage")
+               (:file "conditions")
 	       (:file "cms-query")
                (:module "query-server"
                         :components ((:file "defpackage")

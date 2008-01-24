@@ -1,18 +1,10 @@
+;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
+
 (in-package :cms-query)
 
-(defparameter *parent-opcode* NIL)
-
-(define-condition cms-query-error ()
-  ((explanation :initarg :explanation :accessor explanation))
-  (:report (lambda (c s)
-	     (format s "~A" (explanation c)))))
-
-;;; FIXME: continue here ....
-(define-condition cms-malformed-query (cms-query-error)
-  ((opcode :initarg opcode)))
-
-(define-condition cms-unsupported-query (cms-query-error)
-  ())
+(defparameter *parent-opcode* NIL
+  "This will be dynamically bound during query
+parsing to the containing opcode or NIL.")
 
 (defclass logic-variable ()
   ((name :accessor name :initarg :name))
@@ -20,7 +12,7 @@
 
 (defclass named-logic-variable (logic-variable)
   ((binding :accessor binding :initarg :binding :initform NIL))
-  (:documentation "A named logic variable"))
+  (:documentation "A named logic variable."))
 
 (defmethod print-object ((object logic-variable) stream)
   (format stream "?_"))
@@ -31,37 +23,19 @@
 (defmethod bind ((object logic-variable) value)
   (setf (binding object) value))
 
-(defun process-token (token)
-  )
+;;; Support for namespace shortcuts
+(eval-when (:compile-toplevel :load-toplevel :execute)
 
-(defun parse-qspec (qspec)
-  (loop FOR token IN qspec
-       WHEN (= 0 (position #\? ))
-       DO (format T "~&~A" token)))
-
-(defun find-triples (matchspec)
-  (destructuring-bind (s p o) matchspec
-    (apply #'select '(uri :from facts :limit 20 :offset 40))
-      (format t "~&Subject: ~A~%Predicate: ~A~&Object: ~A" s p o)))
-
-
-(defparameter *ns-map* (make-hash-table)
+  (defparameter *ns-map* (make-hash-table)
   "Hash that maps from keywords to namespaces.")
 
-(define-condition invalid-namespace-prefix ()
-  ((prefix :initarg :prefix :reader namespace-prefix))
-  (:report (lambda (c s)
-             (format s "No matching namespace found for prefix '~a'" (prin1-to-string
-								 (namespace-prefix c))))))
-
-;;; Support for namespace shortcuts
-(eval-when (:load-toplevel :execute)
   (defun register-namespace (keyword namespace)
     "Register a namespace shortcut -KEYWORD will be substituted with NAMESPACE in queries."
     (setf (gethash keyword *ns-map*) namespace))
-  (export 'register-namespace)
-  (register-namespace :document "http://namespaces.zeit.de/CMS/document")
-  (register-namespace :workflow "http://namespaces.zeit.de/CMS/workflow"))
+  (export 'register-namespace))
+
+(register-namespace :document "http://namespaces.zeit.de/CMS/document")
+(register-namespace :workflow "http://namespaces.zeit.de/CMS/workflow")
 
 (defun lookup-namespace (keyword)
   (multiple-value-bind (namespace found) (gethash keyword *ns-map*)
@@ -77,8 +51,15 @@
 (defmethod resolve-namespace ((ns symbol))
   (lookup-namespace ns))
 
-
 ;;; Here follow classes implementing the query opcodes
+
+(defparameter *opcodes* NIL
+  "List of all query opcodes known to the system.")
+
+;;; Not used for now - we want to provide this to be able to generate
+;;; a list of all known opcodes to implement better error reporting.
+(defmacro register-opcode (name supers  &optional (slot-spec (list)) (options (list)))
+  `(defclass ,name ,supers ,slot-spec ,options))
 
 (defclass opcode () ())
 
@@ -92,24 +73,24 @@
   (:documentation ""))
 
 (defclass set-intersection (set-operation)
-()
-(:documentation ""))
+  ()
+  (:documentation ""))
 
 (defclass constraint (opcode)
-  ((cname     :initarg :cname :accessor cname)
-   (name      :initarg :name :accessor name)
-   (namespace :initarg :namespace :accessor namespace))
+  ((cname     :initarg :cname     :accessor cname-of)
+   (name      :initarg :name      :accessor name-of)
+   (namespace :initarg :namespace :accessor namespace-of))
   (:documentation ""))
 
 (defmethod initialize-instance :after ((self constraint) &key &allow-other-keys)
-  (setf (cname self) (make-clark-name (namespace self) (name self))))
+  (setf (cname-of self) (make-clark-name (namespace-of self) (name-of self))))
 
 (defclass filter-constraint (constraint)
-  ((value  :initarg :value     :accessor value))
+  ((value :initarg :value :accessor value-of))
   (:documentation ""))
 
 (defclass relational-constraint (filter-constraint)
-  ((operator :initarg :operator :accessor operator)))
+  ((operator :initarg :operator :accessor operator-of)))
 
 (defclass eq-constraint (relational-constraint)
   ()
@@ -137,8 +118,8 @@
 
 
 (defclass binding-constraint (constraint)
-  ((parent    :initarg :parent :initform *parent-opcode*)
-   (varname   :initarg :varname   :accessor varname))
+  ((parent  :initarg :parent  :initform *parent-opcode*)
+   (varname :initarg :varname :accessor varname))
   (:documentation ""))
 
 ;;; see notes above
@@ -148,10 +129,9 @@
 		 :name name
 		 :varname (symbol-name  value)))
 
-
 (defclass range-constraint (constraint)
   ((from :initarg :from :accessor lower-bound)
-   (to   :initarg :to :accessor upper-bound))
+   (to   :initarg :to   :accessor upper-bound))
   (:documentation "Match a value in the range [FROM TO]"))
 
 (defun make-range-constraint (namespace name from to)
@@ -173,14 +153,13 @@
                  :values values))
 
 
-(defmethod initialize-instance :after ((self member-constraint) &key &allow-other-keys)
-  (with-slots (namespace name values) self
-    (warn "NS ~a~&NAME ~a~&VALUES ~A" namespace name values)))
- 
+;;; The query compiler  
 (defclass compiler-context ()
-  ((stack    :accessor opcode-stack :initform ())
-   (tables   :accessor tables-of    :initform ())
-   (bindings :accessor bindings-of  :initform ())
+  ((stack           :accessor opcode-stack      :initform ())
+   (tables          :accessor tables-of         :initform ())
+   (bindings        :accessor bindings-of       :initform ())
+   (binders         :accessor binders-of        :initform ())
+   (filters         :accessor filters-of        :initform ())
    (predicate-names :initform (make-hash-table)))
   (:documentation ""))
 
@@ -202,8 +181,9 @@
 	   (type (name string)))
   (format NIL "{~A}~A" namespace name))
 
-(defun lookup-binding (name compiler)
-  )
+;; STALE?
+;; (defun lookup-binding (name compiler)
+;;   )
 
 ;;; Add a table the compiler context and return the newly created table
 ;;; name.
@@ -246,7 +226,6 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 (defgeneric collect-p-list (opcode context &key &allow-other-keys)
   (:method ( opcode context &key &allow-other-keys) NIL))
 
-
 (defmethod collect-p-list ((opcode binding-constraint) context &key parent &allow-other-keys)
   `(,(make-symbol (format NIL "~a.value" (get-predicate-name context opcode)))))
 
@@ -262,8 +241,8 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   ;;; Technically speaking keywordp is wrong but it eases development
   ;;; for now.
   (assert (and (listp query) (keywordp (car query))) (query)
-          (make-condition 'cms-malformed-query 
-                          :explanation "Your query doesn't seem to be a valid query"))
+          'cms-malformed-query 
+          :explanation "Your query doesn't seem to be a valid query")
 
   (ecase (opcode query)
     (:and (with-op-class set-intersection
@@ -312,26 +291,26 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
       (ecase (opcode c)
 	(:bind (destructuring-bind (namespace name value) (opargs c)
-	       (push (make-instance 'binding-constraint
+                 (push (make-instance 'binding-constraint
 				    :cname (make-tmp-table-name ccount)
 				    :namespace (resolve-namespace namespace)
 				    :name name
 				    :varname (symbol-name  value)) binders)))
 	(:is (destructuring-bind (namespace name value) (opargs c)
-		 (push (make-instance 'filter-constraint
-				      :cname (make-tmp-table-name ccount)
-				      :namespace (resolve-namespace namespace)
-				      :name name
+               (push (make-instance 'filter-constraint
+                                    :cname (make-tmp-table-name ccount)
+                                    :namespace (resolve-namespace namespace)
+                                    :name name
 				      :value value) filters)))
 	(:in (error "Query opcode :in not yet supported!")))
       (incf ccount))
     (setf constraints (append filters binders))
     (loop for c in constraints
-	 when (eq (type-of c) 'binding-constraint)
-	 do (push
-	     (format nil "~A AS ~A"
-		     (make-qualified-token (cname c) 'value) (varname c))
-	     result-vars))
+       when (eq (type-of c) 'binding-constraint)
+       do (push
+           (format nil "~A AS ~A"
+                   (make-qualified-token (cname c) 'value) (varname c))
+           result-vars))
     (when (= (length result-vars) 0)
       (error "No variables to return?"))
     (with-output-to-string (query)
@@ -344,14 +323,91 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 	      (render-query (nth i constraints) query)
 	      (format query " ON (~A=~A) "
 		      (make-qualified-token (cname (nth (1- i) constraints)) 'uri)
-		      (make-qualified-token (cname (nth i constraints)) 'uri)))
-	))
+		      (make-qualified-token (cname (nth i constraints)) 'uri))))))))
+
+
+(defun sql-escape-field (thing)
+  `(:raw ,(format NIL "\"~a\"" thing)))
+
+(defun generate-plist (bindings uri-source)
+  (loop for (table alias) in bindings 
+     collect `(:as (:dot (:raw ,table) value) ,(sql-escape-field alias)) 
+     into plist
+     finally (return `(:select ,@plist))))
+
+(defun generate-filter/collectors )
+
+(defun compile-sql (query)
+  "Compile a query to a SQL query."
+  (let ((compiler-context (make-instance 'compiler-context)))
+    (labels ((scan (node)
+               (let ((table-name (add-table compiler-context)))
+                 (when (typep node 'binding-constraint)
+                   (push (list  table-name (cname-of node)) (bindings-of compiler-context))
+                   ;; (SELECT uri, namespace, name, value 
+                   ;; FROM facts 
+                   ;; WHERE namespace = 'http://namespaces.zeit.de/CMS/document'
+                   ;; AND   name = 'ressort') AS tmp_2 
+                   (push `(:select (:dot (:raw ,table-name) uri)
+                                   (:dot (:raw ,table-name) namespace)
+                                   (:dot (:raw ,table-name) value)
+                                   :from facts 
+                                   :where (:and (:= namespace "foo")
+                                                (:= name "bar"))
+) 
+                         
+
+                         (binders-of compiler-context)))
+               ;; process branches
+                 (when (typep node 'set-operation)
+                   (loop for node in (branches-of node)
+                      do (scan node))))))
+
+      (scan query)
+      ;; debugging
+      `(:select  ,(generate-plist (bindings-of compiler-context) nil) 
+                 :from ,@(binders-of compiler-context))
       )))
 
 
+;;; Running queries from the REPL
 (defmacro run-query (query)
   "Run query with SPECS and return the result list."
   `(clsql:query (build-query ',query)))
 
 (defun find-resources (specs)
   (clsql:query (build-query specs)))
+
+;;; Pretty-printing query
+(defun indent (depth) 
+  "Helper function for pretty-printing."
+  (make-string depth :initial-element #\tab))
+
+(defparameter *pp-operator-map*
+  '((is . "=")
+    (gt . ">")
+    (lt . "<")
+    (in . "is one of")))
+
+(defun pp-operator (op)
+  (cdr (or (assoc op *pp-operator-map*)
+            (cons op op))))
+
+(defgeneric pprint-query (q &optional stream level))
+
+ (defmethod pprint-query (query &optional (stream T)  (level 0))
+  (format T "~%~A ~A" (indent  level) (class-name (class-of query))))
+
+(defmethod pprint-query ((query relational-constraint) &optional (stream T)  (level 0))
+  (format T "~%~A ~A (resources where ~A ~A ~A" 
+          (indent  level) (class-name (class-of query))
+          (cname-of query) (pp-operator (operator-of query)) (value-of query)))
+
+(defmethod pprint-query :after (query &optional (stream T)  (level 0))
+  (format stream "~%"))
+
+(defmethod pprint-query :after ((query set-operation) &optional (stream T) (level 0))
+  (loop for query in (branches-of query) do (pprint-query query stream (1+ level))))
+
+(defun walk-query (query)
+  )
