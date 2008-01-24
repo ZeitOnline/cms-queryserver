@@ -339,7 +339,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   (loop with clist = (list) 
      for (this . that) on (reverse constraints) 
      do (warn "Processing ~A ~A" this that)
-     when that 
+     when that ; not the first constraint
      do (progn            
           (push `(:= (:dot ,(sql-escape-field (table-name-of (car that))) uri ) 
                      (:dot ,(sql-escape-field (table-name-of this)) uri)) clist)
@@ -386,8 +386,10 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
       (scan query)
       ;; debugging
-      `(:select  ,@(generate-plist (bindings-of compiler-context) nil) 
-                 :from ,@(generate-constraint-list (binders-of compiler-context)))
+      `(:select  
+        (:dot ,(sql-escape-field (table-name-of (first (binders-of compiler-context)))) uri) 
+        ,@(generate-plist (bindings-of compiler-context) nil) 
+        :from ,@(generate-constraint-list (binders-of compiler-context)))
       )))
 
 

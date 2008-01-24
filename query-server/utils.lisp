@@ -16,7 +16,7 @@
 ;;;; *************************************************************************
 
 
-(in-package :cms-query-server)
+(in-package :cms-query)
 
 (defun be-verbose! ()
   (setf tbnl:*show-lisp-backtraces-p* t)

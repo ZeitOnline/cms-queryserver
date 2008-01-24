@@ -25,21 +25,22 @@
 (defvar *last-query* NIL)
 (defvar *database-pool* NIL "Default database connection pool")
 
-(defun  handle-search-request ()
-  "Returns a WebDAV compliant XML response"
-  (setf (tbnl:header-out "X-QENGINE") "CMS Query Server v0.1alpha")
-  (setf (tbnl:content-type) "text/xml; charset=UTF-8")
-;FIXME: (setf (tbnl:reply-external-format) "UTF-8")
-  (let* ((*read-eval* NIL)
-         (request-query (tbnl:raw-post-data)))
-    (setf *last-query* request-query)
 
-    (let* ((context (make-instance 'compiler-context))
-           (query   (compile-query (read-from-string  request-query)))
-           (sql     (build-query (scan-opcode query context))))
-      ;; Insert WebDAV response
-      (format NIL "~&<!--~&~A~%-->~%~S~% " sql  
-              (dav:serialize-xmls-node (apply #'dav:dav-node (list "multistatus" "")))))))
+;; (defun  handle-search-request ()
+;;   "Returns a WebDAV compliant XML response"
+;;   (setf (tbnl:header-out "X-QENGINE") "CMS Query Server v0.1alpha")
+;;   (setf (tbnl:content-type) "text/xml; charset=UTF-8")
+;; ;FIXME: (setf (tbnl:reply-external-format) "UTF-8")
+;;   (let* ((*read-eval* NIL)
+;;          (request-query (tbnl:raw-post-data)))
+;;     (setf *last-query* request-query)
+
+;;     (let* ((context (make-instance 'compiler-context))
+;;            (query   (compile-query (read-from-string  request-query)))
+;;            (sql     (build-query (scan-opcode query context))))
+;;       ;; Insert WebDAV response
+;;       (format NIL "~&<!--~&~A~%-->~%~S~% " sql  
+;;               (dav:serialize-xmls-node (apply #'dav:dav-node (list "multistatus" "")))))))
 
 (defgeneric handle-interactive-request ()
   (:documentation "Presents a HTML input form for interactive queries.
@@ -200,77 +201,39 @@ method combinations."))
     ))
 
 
+(defun handle-search-request ()
+  "Handler that queries the matadata store and returns
+a WebDAV propget response."
+  (let (query sql-query)
+    
+    (setf
+     (header-out "Server") "CMS-Query-Server"
+     (header-out "X-Handled-By") "handle-search-request"
+     (content-type) "text/xml; charset=utf-8"
+     (return-code) +http-multi-status+)
 
-#| FILTER
- (:select uri 
-         :from (:as facts <table>) 
-         :where (:and (:= namespace <ns>) 
-                      (:= name <name>)
-                      (:= value <value>)))
-|#
+    ;; FIXME: add error handling
+    (let* ((*read-eval* NIL))
+      (setf query (read (tbnl:raw-post-data  :want-stream t))))
+    
+    (setf sql-query (sql-compile (compile-sql (compile-query query))))
+    (warn "SQL: ~sql-query" sql-query)
 
-#| BINDER
- (:select uri value
-         :from (:as facts <table>) 
-         :where (:and (:= namespace <ns>) 
-                      (:= name <name>)
-                      (:= value <value>)))
-|#
+    (with-output-to-string (s)
+      (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t)
+        (format s "<?xml version='1.0' encoding='utf-8' ?>
+<D:multistatus xmlns:D='DAV:'>~%")
+        (loop for tuple in tuples
+           do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:prop>" (first tuple))
+                      (loop for value in (rest tuple) and
+                         fname in (rest fields)
+                         do (destructuring-bind (ns name) (clark-to-ns-name fname)
+                           (format s "~&<~A xmlns='~a'>~a</~A>" name ns value name)))
+                      (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:response>"))
+        
+             )))))
 
-#|
-  (:select 'foo 'bar 'baz :from 
-  (:as (:select 'foo :from 'x :where 'x) 'tmp1)
-    :inner-join 
-  (:as (:select 'bar :from 'x :where 'x) 'tmp2) :on (:='tmp1.id 'tmp2.id)
-    :inner-join 
-  (:as (:select 'baz :from 'x :where 'x) 'tmp3) :on (:='tmp2.id 'tmp3.id))
-|#
-
-(defun generate-sql (query context)
-  "..."
-  (assert (typep query 'set-operation))
-  `(:Select (:dot ,(get-predicate-name context (first (bindings-of context))) uri) 
-            ,@(collect-p-list query context) 
-            :from ,@(compile-sql query context)) )
-
-(defgeneric compile-sql (opcode context)
-  (:documentation "Compile a pre-comiled query into a corresponding SQL query."))
-
-(defmethod compile-sql ((opcode binding-constraint) context)
-  (with-slots (namespace name) opcode
-    `(:as (:select uri value
-                :from facts 
-                :where (:and (:= namespace ,namespace) 
-                             (:= name ,name))) ,(get-predicate-name context opcode)) ))
-
-(defmethod compile-sql ((opcode filter-constraint) context)
-  (with-slots (namespace name value) opcode
-    `(:as (:select uri 
-                   :from facts 
-                   :where (:and (:= namespace ,namespace) 
-                                (:= name ,name)
-                                (:= value ,value))) ,(get-predicate-name context opcode)) ))
-
-(defmethod compile-sql ((opcode member-constraint) context)
-  (with-slots (namespace name values) opcode
-    `(as (:select uri
-                  :from facts
-                   :where (:and (:= namespace ,namespace) 
-                                (:= name ,name)
-                                (:in value ,@values))) ,(get-predicate-name context opcode)) ))
-
-;;; join the sub-statements  
-(defmethod compile-sql ((opcode set-intersection) context)
-  (loop 
-     with branches = (coerce (branches-of opcode) 'vector)
-     with length   = (length branches) 
-       
-     for b across branches and pos from 0
-     collect (compile-sql b context)
-
-     when (> pos 0) append `(:on (:= (:dot ,(get-predicate-name context (aref branches (- pos 1))) uri) 
-                                     (:dot ,(get-predicate-name context (aref branches pos)) uri)))
-     when (< pos (- length 1)) append '(:inner-join)))
+  
 
 
 #-DEPLOYMENT
@@ -312,186 +275,6 @@ method combinations."))
                          :external-format :utf-8))
          )))
 
-#-DEPLOYMENT
-(defparameter +mock-props+
-  '(("{http://namespaces.zeit.de/CMS/document}author" "Peter Buhr")
-    ("{http://namespaces.zeit.de/CMS/document}year" "2007")
-    ("{http://namespaces.zeit.de/CMS/document}volume" "23")
-    ("{http://namespaces.zeit.de/CMS/workflow}status" "OK")))
-
-#-DEPLOYMENT
-(defparameter +mock-resources+
-  '("/work/2006/21/foo" "/work/2007/12/bar"
-    "/cms/work/2006/45/01-Bundeswehr"
-"/cms/work/2006/45/01-Parteien"
-"/cms/work/2006/45/50-J-hrige-Donig"
-"/cms/work/2006/45/515-Artgenossen-45"
-"/cms/work/2006/45/515-Donnerstalk-45"
-"/cms/work/2006/45/515-Koalitionskrise"
-"/cms/work/2006/45/515-WoWo-45"
-"/cms/work/2006/45/516-Draussen"
-"/cms/work/2006/45/516-Friedhof"
-"/cms/work/2006/45/Anrei-er-oben-rechts"
-"/cms/work/2006/45/Argument"
-"/cms/work/2006/45/Aufgaben-Bundeswehr"
-"/cms/work/2006/45/Autotest-Volvo-C70"
-"/cms/work/2006/45/Badlands"
-"/cms/work/2006/45/Bahn"
-"/cms/work/2006/45/Barack-Obama"
-"/cms/work/2006/45/BdW-45"
-"/cms/work/2006/45/Beistueck-Leicht"
-"/cms/work/2006/45/Berliner-Buehne"
-"/cms/work/2006/45/Bischof-Huber"
-"/cms/work/2006/45/Blocker-Elvis"
-"/cms/work/2006/45/BU-Mur"
-"/cms/work/2006/45/Burda-Bu"
-"/cms/work/2006/45/Burda-Interview"
-"/cms/work/2006/45/BU-s"
-"/cms/work/2006/45/BU-Zeitreisen"
-"/cms/work/2006/45/Camorra"
-"/cms/work/2006/45/C-Campus-Washington"
-"/cms/work/2006/45/c-gefragt-sprachlos"
-"/cms/work/2006/45/C-Stillarbeit"
-"/cms/work/2006/45/C-TuT45"
-"/cms/work/2006/45/D-Aufmacher-45"
-"/cms/work/2006/45/D-Empfehlungen-45"
-"/cms/work/2006/45/D-Filmtitel-45"
-"/cms/work/2006/45/D-Meinecke-45"
-"/cms/work/2006/45/D-Musikklassiker-45"
-"/cms/work/2006/45/D-Unteraufmacher-45"
-"/cms/work/2006/45/England-Sprachkurs"
-"/cms/work/2006/45/England-Sprachkurs-Info"
-"/cms/work/2006/45/Finis-45"
-"/cms/work/2006/45/Fortsetzungen"
-"/cms/work/2006/45/Gewalt-45"
-"/cms/work/2006/45/Glosse"
-"/cms/work/2006/45/Glosse-1-45"
-"/cms/work/2006/45/Grafiktext-1"
-"/cms/work/2006/45/Grafiktext-2"
-"/cms/work/2006/45/G-REITs"
-"/cms/work/2006/45/Habermas"
-"/cms/work/2006/45/Handgepaeck"
-"/cms/work/2006/45/Headline-Huber"
-"/cms/work/2006/45/Headline-PKV"
-"/cms/work/2006/45/Headline-Schulz"
-"/cms/work/2006/45/Hillary-Clinton"
-"/cms/work/2006/45/Hoffnungen"
-"/cms/work/2006/45/Hoffnungen-link"
-"/cms/work/2006/45/Hogarth"
-"/cms/work/2006/45/Impressum-seit-19-06"
-"/cms/work/2006/45/inderzeit"
-"/cms/work/2006/45/Infokasten"
-"/cms/work/2006/45/Inhalt-aussen"
-"/cms/work/2006/45/Inhalt-innen-1"
-"/cms/work/2006/45/Inhalt-innen-2"
-"/cms/work/2006/45/Inhalt--si"
-"/cms/work/2006/45/Interview-Judt"
-"/cms/work/2006/45/Interview-Saelzer"
-"/cms/work/2006/45/Interview-Vladi"
-"/cms/work/2006/45/Jelinek"
-"/cms/work/2006/45/Kasten-Huber"
-"/cms/work/2006/45/KJ-Heidelbach"
-"/cms/work/2006/45/KJ-Julit"
-"/cms/work/2006/45/KJ-Luchs-45"
-"/cms/work/2006/45/KJ-Mozart"
-"/cms/work/2006/45/KL-Buechertisch"
-"/cms/work/2006/45/Kleiner-Text-45"
-"/cms/work/2006/45/KL-Gedicht"
-"/cms/work/2006/45/Klima"
-"/cms/work/2006/45/Klima-Kasten"
-"/cms/work/2006/45/KL-Mittelstueck"
-"/cms/work/2006/45/KL-Stillleben"
-"/cms/work/2006/45/Kolumne"
-"/cms/work/2006/45/Komiker-Cohen"
-"/cms/work/2006/45/Kongo-Wahlen"
-"/cms/work/2006/45/Konjunktur"
-"/cms/work/2006/45/Kunstfehler"
-"/cms/work/2006/45/Kunstmarkt-6-Fragen"
-"/cms/work/2006/45/Kunstmarkt-Aufgerufen"
-"/cms/work/2006/45/Kunstmarkt-Aufmacher"
-"/cms/work/2006/45/Kunstmarkt-Kommentar"
-"/cms/work/2006/45/LB45-beilage"
-"/cms/work/2006/45/LB45-DOSSIERkevin"
-"/cms/work/2006/45/LB45-POLarmut"
-"/cms/work/2006/45/LB45-POLm-ntefering"
-"/cms/work/2006/45/LB45-POLmuslime"
-"/cms/work/2006/45/LB45-WISSENexzellenz"
-"/cms/work/2006/45/LB45-ZLitalien"
-"/cms/work/2006/45/LB45-ZLk-penickiade"
-"/cms/work/2006/45/L-Interview-Biermann"
-"/cms/work/2006/45/Lit-Inhalt"
-"/cms/work/2006/45/L-Krimi-Schaedel"
-"/cms/work/2006/45/LS-Duisburg"
-"/cms/work/2006/45/LS-Holocaustmuseum"
-"/cms/work/2006/45/Macher-Maerkte"
-"/cms/work/2006/45/Maeusekino-45"
-"/cms/work/2006/45/Maeusekino-Wirtschaft"
-"/cms/work/2006/45/MarieAntoinette"
-"/cms/work/2006/45/Markt-45"
-"/cms/work/2006/45/Martenstein-45"
-"/cms/work/2006/45/Meldungen-45"
-"/cms/work/2006/45/Mexiko"
-"/cms/work/2006/45/Mexiko-Info"
-"/cms/work/2006/45/M-Tuberkulose"
-"/cms/work/2006/45/N-Honig"
-"/cms/work/2006/45/N-Kennzeichnung-Kasten"
-"/cms/work/2006/45/Ohio"
-"/cms/work/2006/45/P-Angst"
-"/cms/work/2006/45/Pariser-Vorstadtkrawalle"
-"/cms/work/2006/45/Paulson"
-"/cms/work/2006/45/Paulson-Kasten"
-"/cms/work/2006/45/P-Eulenburg"
-"/cms/work/2006/45/PKV"
-"/cms/work/2006/45/P-Leinfelder"
-"/cms/work/2006/45/P-Leinfelder-Kasten"
-"/cms/work/2006/45/Populismus-Slowakei"
-"/cms/work/2006/45/P-Sturm"
-"/cms/work/2006/45/Rihm-Oper"
-"/cms/work/2006/45/Rostock"
-"/cms/work/2006/45/Schulz"
-"/cms/work/2006/45/Sehenswert45"
-"/cms/work/2006/45/Siebeck-K-chenschrank-Pinselglas"
-"/cms/work/2006/45/Siebeck-Kolumne-Buecher-II"
-"/cms/work/2006/45/Snowcake"
-"/cms/work/2006/45/Spielen-Ecke45"
-"/cms/work/2006/45/Spielen-Lebensgeschichte-45"
-"/cms/work/2006/45/Spielen-Logelei-45"
-"/cms/work/2006/45/Spielen-Schach-45"
-"/cms/work/2006/45/Spielen-Scrabble45"
-"/cms/work/2006/45/Spielen-Sudoku45"
-"/cms/work/2006/45/Spitze-45"
-"/cms/work/2006/45/Stimmts-Pestizid"
-"/cms/work/2006/45/ST-Zizek-45"
-"/cms/work/2006/45/T-AutoAuto"
-"/cms/work/2006/45/Text-Logo"
-"/cms/work/2006/45/T-Galileo"
-"/cms/work/2006/45/Titel-Ank-ndigung-45"
-"/cms/work/2006/45/Titel-Computerspiele-45"
-"/cms/work/2006/45/Traum-Woody-Allen"
-"/cms/work/2006/45/T-Technik-Kasten"
-"/cms/work/2006/45/Tuerkei"
-"/cms/work/2006/45/US-Irak-Politik"
-"/cms/work/2006/45/Vitakasten"
-"/cms/work/2006/45/Vita-Schmidt"
-"/cms/work/2006/45/Vordenker-Serie"
-"/cms/work/2006/45/Vorlesegeschichte"
-"/cms/work/2006/45/v_-Zeit-Mitarbeitern"
-"/cms/work/2006/45/Wahlen-USA"
-"/cms/work/2006/45/Welt-in-Zahlen"
-"/cms/work/2006/45/Westerwelle"
-"/cms/work/2006/45/W-Geschichten-45"
-"/cms/work/2006/45/W-Gesellschafter-45"
-"/cms/work/2006/45/W-Holzamer-45"
-"/cms/work/2006/45/Wilhelm-Heitmeyer"
-"/cms/work/2006/45/W-Liste-Unterschriften-45"
-"/cms/work/2006/45/Wowos-Zsp_-45"
-"/cms/work/2006/45/W-UnsereKleineWelt-45"
-"/cms/work/2006/45/W-Zettel-45"
-"/cms/work/2006/45/ZB-Hexenjagd"
-"/cms/work/2006/45/ZEIT-Campus"
-"/cms/work/2006/45/Zeit-online"
-"/cms/work/2006/45/Zinsen"
-"/cms/work/2006/45/Zitat"))
 
 ;;;; *************************************************************************
 ;;;; This program is free software; you can redistribute it and/or modify

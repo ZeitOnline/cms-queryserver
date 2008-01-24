@@ -16,7 +16,7 @@
 ;;;; *************************************************************************
 
 
-(in-package :cms-query-server)
+(in-package :cms-query)
 
 (defclass resource-pool ()
   ((resources
