@@ -16,9 +16,10 @@
   :components ((:file "defpackage")
                (:file "conditions")
 	       (:file "cms-query")
-               (:module "query-server"
-                        :components ((:file "defpackage")
-                                     (:file "query-server")
-                                     (:file "db-pool")
-                                     (:file "utils")))))
+;;                (:module "query-server"
+;;                         :components ((:file "defpackage")
+;;                                      (:file "query-server")
+;;                                      (:file "db-pool")
+;;                                      (:file "utils")))
+))
 

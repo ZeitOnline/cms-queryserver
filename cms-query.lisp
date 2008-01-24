@@ -1,4 +1,4 @@
-;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
+o;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
 
 (in-package :cms-query)
 
@@ -64,8 +64,7 @@ parsing to the containing opcode or NIL.")
 (defclass opcode () ())
 
 (defclass set-operation (opcode)
-  ((table-name :accessor table-name-of) 
-   (branches   :accessor branches-of))
+  ((branches   :accessor branches-of))
   (:documentation ""))
 
 (defclass set-union (set-operation)
@@ -77,9 +76,10 @@ parsing to the containing opcode or NIL.")
   (:documentation ""))
 
 (defclass constraint (opcode)
-  ((cname     :initarg :cname     :accessor cname-of)
-   (name      :initarg :name      :accessor name-of)
-   (namespace :initarg :namespace :accessor namespace-of))
+  ((table-name :accessor table-name-of) 
+   (cname      :initarg  :cname        :accessor cname-of)
+   (name       :initarg  :name         :accessor name-of)
+   (namespace  :initarg  :namespace    :accessor namespace-of))
   (:documentation ""))
 
 (defmethod initialize-instance :after ((self constraint) &key &allow-other-keys)
@@ -333,9 +333,41 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   (loop for (table alias) in bindings 
      collect `(:as (:dot (:raw ,table) value) ,(sql-escape-field alias)) 
      into plist
-     finally (return `(:select ,@plist))))
+     finally (return plist)))
 
-(defun generate-filter/collectors )
+(defun generate-constraint-list (constraints)
+  (loop with clist = (list) 
+     for (this . that) on (reverse constraints) 
+     do (warn "Processing ~A ~A" this that)
+     when that 
+     do (progn            
+          (push `(:= (:dot ,(sql-escape-field (table-name-of (car that))) uri ) 
+                     (:dot ,(sql-escape-field (table-name-of this)) uri)) clist)
+          (push :on  clist))
+     do (push (generate-sql this) clist)
+     when that 
+     do (push :inner-join clist)
+     finally (return clist)))
+
+(defgeneric generate-sql (node))
+
+(defmethod generate-sql (node)
+  (error "Don't know how to generate SQL for ~A" node))
+
+(defmethod generate-sql ((node binding-constraint))
+  `(:as (:select uri value
+                 :from facts 
+                 :where (:and (:= namespace ,(namespace-of node))
+                              (:= name ,(name-of node)))) 
+        (:raw ,(table-name-of node))))
+
+(defmethod generate-sql ((node filter-constraint))
+  `(:as (:select uri
+                 :from facts 
+                 :where (:and (:= namespace ,(namespace-of node))
+                              (:= name ,(name-of node))
+                              (:= value ,(value-of node))))
+        (:raw ,(table-name-of node))))
 
 (defun compile-sql (query)
   "Compile a query to a SQL query."
@@ -343,37 +375,30 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
     (labels ((scan (node)
                (let ((table-name (add-table compiler-context)))
                  (when (typep node 'binding-constraint)
-                   (push (list  table-name (cname-of node)) (bindings-of compiler-context))
-                   ;; (SELECT uri, namespace, name, value 
-                   ;; FROM facts 
-                   ;; WHERE namespace = 'http://namespaces.zeit.de/CMS/document'
-                   ;; AND   name = 'ressort') AS tmp_2 
-                   (push `(:select (:dot (:raw ,table-name) uri)
-                                   (:dot (:raw ,table-name) namespace)
-                                   (:dot (:raw ,table-name) value)
-                                   :from facts 
-                                   :where (:and (:= namespace "foo")
-                                                (:= name "bar"))
-) 
-                         
-
-                         (binders-of compiler-context)))
-               ;; process branches
+                   (push (list  table-name (cname-of node)) (bindings-of compiler-context)))
+                 (when (typep node 'constraint)
+                   (setf (table-name-of node) table-name)
+                   (push node (binders-of compiler-context)))
+                 ;; process branches
                  (when (typep node 'set-operation)
                    (loop for node in (branches-of node)
                       do (scan node))))))
 
       (scan query)
       ;; debugging
-      `(:select  ,(generate-plist (bindings-of compiler-context) nil) 
-                 :from ,@(binders-of compiler-context))
+      `(:select  ,@(generate-plist (bindings-of compiler-context) nil) 
+                 :from ,@(generate-constraint-list (binders-of compiler-context)))
       )))
 
 
 ;;; Running queries from the REPL
 (defmacro run-query (query)
   "Run query with SPECS and return the result list."
-  `(clsql:query (build-query ',query)))
+  `(clsql:query (sql-compile (compile-sql (compile-query ',query)))))
+
+(defmacro show-query (query)
+  "Run query with SPECS and return the result list."
+  `(sql-compile (compile-sql (compile-query ',query))))
 
 (defun find-resources (specs)
   (clsql:query (build-query specs)))
