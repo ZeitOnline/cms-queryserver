@@ -1,5 +1,5 @@
 (defpackage #:cms-query 
-  (:use :cl :s-sql :hunchentoot :cl-who)
+  (:use :cl :s-sql :hunchentoot :cl-who :lisa-lisp)
   (:export 
    #:*ns-map*
    #:find-resources
@@ -7,5 +7,6 @@
    #:run-query))
 
 (defpackage #:cms-query-user 
-  (:use :cl :cms-query)
+  (:use :cl 
+        :cms-query)
   (:nicknames :cms))

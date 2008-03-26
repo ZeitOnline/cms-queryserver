@@ -200,7 +200,6 @@ method combinations."))
                       (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) 
     ))
 
-
 (defun handle-search-request ()
   "Handler that queries the matadata store and returns
 a WebDAV propget response."
@@ -236,7 +235,7 @@ a WebDAV propget response."
   
 
 
-#-DEPLOYMENT
+#-DEPLOYMENT 
 (defun mockup-handler ()
   "Mokup handler to emit fake query responses"
 
