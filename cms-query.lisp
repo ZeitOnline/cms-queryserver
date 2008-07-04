@@ -1,10 +1,12 @@
-o;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
+;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
 
 (in-package :cms-query)
 
 (defparameter *parent-opcode* NIL
   "This will be dynamically bound during query
 parsing to the containing opcode or NIL.")
+(defparameter *max-results-per-query* 1111
+  "Maximum number of result rows returns.")
 
 (defclass logic-variable ()
   ((name :accessor name :initarg :name))
@@ -197,7 +199,7 @@ parsing to the containing opcode or NIL.")
 
 (defun opcode (thing)
   (let ((code (first thing)))
-    (unless (keywordp code)
+    (unless (symbolp code)
       (error "~A is not a valid OPCODE" code))
     code))
 
@@ -240,11 +242,11 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   ;;; Some simple error checking ...
   ;;; Technically speaking keywordp is wrong but it eases development
   ;;; for now.
-  (assert (and (listp query) (keywordp (car query))) (query)
-          'cms-malformed-query 
-          :explanation "Your query doesn't seem to be a valid query")
+;;(assert (and (listp query) (keywordp (car query))) (query)
+;;           'cms-malformed-query 
+;;           :explanation "Your query doesn't seem to be a valid query")
 
-  (ecase (opcode query)
+  (ecase (intern (symbol-name (opcode query)) (load-time-value (find-package :keyword)))
     (:and (with-op-class set-intersection
 	    (setf (branches-of set-intersection)
 		  (loop for node in (opargs query) collect (compile-query node)))))
@@ -256,8 +258,8 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
     (:gt (apply #'make-filter-constraint :> (opargs query)))
     (:lt (apply #'make-filter-constraint :< (opargs query)))
     (:bind (apply  #'make-binding-constraint (opargs query)))
-    (:member-p (apply  #'make-member-constraint (opargs query)))
-    (:between (error 'cms-query-error :explanation "OPCODE :between not yet supported!"))))
+    (:member  (apply  #'make-member-constraint (opargs query)))
+    (:between (apply #'make-range-constraint (opargs query)))))
 
 (defgeneric scan-opcode (opcode context))
 
@@ -338,7 +340,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 (defun generate-constraint-list (constraints)
   (loop with clist = (list) 
      for (this . that) on (reverse constraints) 
-     do (warn "Processing ~A ~A" this that)
+     ;; do (warn "Processing ~A ~A" this that)
      when that ; not the first constraint
      do (progn            
           (push `(:= (:dot ,(sql-escape-field (table-name-of (car that))) uri ) 
@@ -368,6 +370,39 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
                               (:= name ,(name-of node))
                               (:= value ,(value-of node))))
         (:raw ,(table-name-of node))))
+(defmethod generate-sql ((node lt-constraint))
+  `(:as (:select uri
+                 :from facts 
+                 :where (:and (:= namespace ,(namespace-of node))
+                              (:= name ,(name-of node))
+                              (:< value ,(value-of node))))
+        (:raw ,(table-name-of node))))
+
+(defmethod generate-sql ((node gt-constraint))
+  `(:as (:select uri
+                 :from facts 
+                 :where (:and (:= namespace ,(namespace-of node))
+                              (:= name ,(name-of node))
+                              (:> value ,(value-of node))))
+        (:raw ,(table-name-of node))))
+
+(defmethod generate-sql ((node range-constraint))
+  `(:as (:select uri
+                 :from facts 
+                 :where (:and (:= namespace ,(namespace-of node))
+                              (:= name ,(name-of node))
+                              (:> value ,(lower-bound node))
+                              (:< value ,(upper-bound node))))
+        (:raw ,(table-name-of node))))
+
+(defmethod generate-sql ((node member-constraint))
+  `(:as (:select uri
+                 :from facts 
+                 :where (:and (:= namespace ,(namespace-of node))
+                              (:= name ,(name-of node))
+                              (:in value (:set ,@(values-of node)))))
+        (:raw ,(table-name-of node))))
+
 
 (defun compile-sql (query)
   "Compile a query to a SQL query."
@@ -386,10 +421,10 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
       (scan query)
       ;; debugging
-      `(:select  
-        (:dot ,(sql-escape-field (table-name-of (first (binders-of compiler-context)))) uri) 
-        ,@(generate-plist (bindings-of compiler-context) nil) 
-        :from ,@(generate-constraint-list (binders-of compiler-context)))
+      `(:limit (:select  
+          (:dot ,(sql-escape-field (table-name-of (first (binders-of compiler-context)))) uri) 
+          ,@(generate-plist (bindings-of compiler-context) nil) 
+          :from ,@(generate-constraint-list (binders-of compiler-context))) ,*max-results-per-query*)
       )))
 
 
