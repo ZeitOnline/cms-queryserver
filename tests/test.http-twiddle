@@ -1,0 +1,13 @@
+SEARCH /cms/work/2006/32/ HTTP/1.1
+Host: zip6:9999
+Connection: close
+X-CMS-DEBUG: query
+Content-Type: text/xml
+Content-Length: $Content-Length
+
+(:and (:bind "http://namespaces.zeit.de/CMS/document" "volume" _) 
+      (:bind "http://namespaces.zeit.de/CMS/document" "author" _) 
+      (:bind "http://namespaces.zeit.de/CMS/document" "ressort" _) 
+      (:eq "http://namespaces.zeit.de/CMS/document" "year" "2009") 
+      (:eq "http://namespaces.zeit.de/CMS/document" "volume" "09"))
+

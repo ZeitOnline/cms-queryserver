@@ -1,0 +1,10 @@
+SEARCH http://zip6.zeit.de:9999/ HTTP/1.1
+Accept-Encoding: identity
+Host: zip6.zeit.de:9999
+
+(:and (:bind "http://namespaces.zeit.de/CMS/document" "title" _)  
+      (:bind "http://namespaces.zeit.de/QPS/attributes" "page" _) 
+      (:bind "http://namespaces.zeit.de/CMS/document" "year" _) 
+      (:bind "http://namespaces.zeit.de/CMS/document" "volume"_) 
+      (:bind "http://namespaces.zeit.de/CMS/document" "author" _) 
+      (:eq "http://namespaces.zeit.de/CMS/workflow" "corrected" "no"))

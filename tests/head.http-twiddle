@@ -1,0 +1,4 @@
+HEAD http://zip6.zeit.de:9999/ HTTP/1.1
+Accept-Encoding: identity
+Host: zip6.zeit.de:9999
+
