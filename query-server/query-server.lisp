@@ -220,10 +220,8 @@ a WebDAV propget response."
     (setf (reply-external-format)  (flex:make-external-format :utf-8 :eol-style :lf))
     
     (with-output-to-string (s)
-      (unwind-protect
-	(progn 
-          (clsql:connect *query-database* :pool t)
-          (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t)
+      (clsql:with-database (db *query-database* :pool t :make-default nil)
+          (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t :database db)
             (format s "<?xml version='1.0' encoding='utf-8' ?>
 <D:multistatus xmlns:D='DAV:'>~%")
             (loop for tuple in tuples
@@ -234,7 +232,7 @@ a WebDAV propget response."
                                   (format s "~&<~A xmlns='~a'>~a</~A>" name ns (hunchentoot:escape-for-html value) name)))
                           (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:propstat>~%</D:response>")))
             (format s "</D:multistatus>")))
-        (clsql:disconnect) *query-database*))))
+      s)))
 
   
 
