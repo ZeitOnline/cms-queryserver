@@ -216,21 +216,25 @@ a WebDAV propget response."
       (setf query (read (tbnl:raw-post-data  :want-stream t))))
     
     (setf sql-query (sql-compile (compile-sql (compile-query query))))
-    (warn "SQL: ~A" sql-query)
+    ;; (warn "SQL: ~A" sql-query)
     (setf (reply-external-format)  (flex:make-external-format :utf-8 :eol-style :lf))
     
     (with-output-to-string (s)
-      (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t)
-        (format s "<?xml version='1.0' encoding='utf-8' ?>
+      (unwind-protect
+	(progn 
+          (clsql:connect *query-database* :pool t)
+          (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t)
+            (format s "<?xml version='1.0' encoding='utf-8' ?>
 <D:multistatus xmlns:D='DAV:'>~%")
-        (loop for tuple in tuples
-           do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:propstat>~%<D:prop>" (first tuple))
-                      (loop for value in (rest tuple) and
-                         fname in (rest fields)
-                         do (destructuring-bind (ns name) (clark-to-ns-name fname)
-                              (format s "~&<~A xmlns='~a'>~a</~A>" name ns (hunchentoot:escape-for-html value) name)))
-                      (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:propstat>~%</D:response>")))
-        (format s "</D:multistatus>")))))
+            (loop for tuple in tuples
+               do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:propstat>~%<D:prop>" (first tuple))
+                          (loop for value in (rest tuple) and
+                             fname in (rest fields)
+                             do (destructuring-bind (ns name) (clark-to-ns-name fname)
+                                  (format s "~&<~A xmlns='~a'>~a</~A>" name ns (hunchentoot:escape-for-html value) name)))
+                          (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:propstat>~%</D:response>")))
+            (format s "</D:multistatus>")))
+        (clsql:disconnect) *query-database*))))
 
   
 

@@ -12,7 +12,9 @@
 (asdf:oos 'asdf:compile-op :cms-query)
 (asdf:oos 'asdf:load-op :cms-query)
 (in-package :cms-query)
-(clsql:connect '("localhost" "cms" "postgres" "") :pool t)
+(defvar *query-database* '("localhost" "cms" "postgres" "") 
+	"Connection spec fot the backend database")
+
 (start :address "10.100.10.27" :port 9999) 
 
 
