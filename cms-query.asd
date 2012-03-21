@@ -18,7 +18,7 @@
 	       (:file "cms-query")
                (:module "query-server"
                         :components (
+;;                                     (:file "db-pool")
                                      (:file "query-server")
-                                     (:file "db-pool")
                                      (:file "utils")))))
 

@@ -92,9 +92,9 @@
         (incf (res-count-of pool))))))
 
 (defmethod release-resource ((pool database-pool) resource)
-  (tbnl::with-lock ((pool-mutex pool))
-    (unless (member resource (resources-of pool)))
-    (push resource (resources-of pool)))
+;;  (tbnl::with-lock ((pool-mutex pool)))
+  (unless (member resource (resources-of pool)))
+  (push resource (resources-of pool))
   (values))
 
 (defmethod clear-pool ((pool database-pool))

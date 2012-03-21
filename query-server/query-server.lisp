@@ -24,23 +24,21 @@
 (defvar *address* "localhost")
 (defvar *last-query* NIL)
 (defvar *database-pool* NIL "Default database connection pool")
+(defvar *query-database* '("localhost" "cms" "postgres" "") "Connection spec fot the backend database")
 
 
-;; (defun  handle-search-request ()
-;;   "Returns a WebDAV compliant XML response"
-;;   (setf (tbnl:header-out "X-QENGINE") "CMS Query Server v0.1alpha")
-;;   (setf (tbnl:content-type) "text/xml; charset=UTF-8")
-;; ;FIXME: (setf (tbnl:reply-external-format) "UTF-8")
-;;   (let* ((*read-eval* NIL)
-;;          (request-query (tbnl:raw-post-data)))
-;;     (setf *last-query* request-query)
+;;; Our Application Class
+(defclass query-acceptor (acceptor)
+  ()
+  (:documentation "Query Server Application"))
 
-;;     (let* ((context (make-instance 'compiler-context))
-;;            (query   (compile-query (read-from-string  request-query)))
-;;            (sql     (build-query (scan-opcode query context))))
-;;       ;; Insert WebDAV response
-;;       (format NIL "~&<!--~&~A~%-->~%~S~% " sql  
-;;               (dav:serialize-xmls-node (apply #'dav:dav-node (list "multistatus" "")))))))
+;;; FIXME: handle request headers here (query debugging et al.)
+(defmethod acceptor-dispatch-request ((app query-acceptor) request)
+  (funcall  (ecase (tbnl:request-method request)
+              (:search 'handle-search-request)
+              (:post   'mockup-handler)
+              (:get    'test-handler))))
+
 
 (defgeneric handle-interactive-request ()
   (:documentation "Presents a HTML input form for interactive queries.
@@ -55,66 +53,47 @@ Returns a tabualted list of results."))
         (has-query (post-parameter "query")))
     (warn "Got query ~A" (read-from-string  query))
     (with-output-to-string (s) 
-    (cl-who:with-html-output (*standard-output* s :indent t)
-      (:div :class "formcontainer"
-            (:form :method :post :enctype "multipart/form-data"  ;:action ""
-                   (:div :class "formpostfield"
-                         (:p "Query:" 
-                             (:br) 
-                             (:textarea :name "query" :rows 10 :cols 30  (cl-who:str query)
-                                        )))
-                   (:div :class "formsubmitfield"
-                         (:input :type :reset))
-                   (:div :class "formsubmitfield"
-                         (:input :type :submit))
-                   (:dic :class "pp-query" 
-                         (:p  
-                          (cl-who:fmt "~S"  
-                           (if has-query 
-                               (cms-query::find-resources (read-from-string query)) 
-                               "No query found"))))))))))
+      (cl-who:with-html-output (*standard-output* s :indent t)
+        (:div :class "formcontainer"
+              (:form :method :post :enctype "multipart/form-data"  ;:action ""
+                     (:div :class "formpostfield"
+                           (:p "Query:" 
+                               (:br) 
+                               (:textarea :name "query" :rows 10 :cols 30  (cl-who:str query)
+                                          )))
+                     (:div :class "formsubmitfield"
+                           (:input :type :reset))
+                     (:div :class "formsubmitfield"
+                           (:input :type :submit))
+                     (:dic :class "pp-query" 
+                           (:p  
+                            (cl-who:fmt "~S"  
+                                        (if has-query 
+                                            (cms-query::find-resources (read-from-string query)) 
+                                            "No query found"))))))))))
 
-(defgeneric cms-query-server-dispatch (request)
-  (:documentation "Handle a query request. 
-This needs to be a generic function since we want to us
-method combinations."))
-
-;;; We need this arround-method to set up the resources needed to handle
-;;; the request
-(defmethod cms-query-server-dispatch :around (request)
-
-  (prog1  (call-next-method)
-    
-    ))
-
-(defmethod cms-query-server-dispatch (request)
-  "Only handle SEARCH method requests"
-  (ecase (tbnl:request-method request)
-    (:search 'handle-search-request)
-    (:post   'mockup-handler)
-    (:get    'mockup-handler)))
 
 ;;; Main entry point: the following functions start/stop the server
-
-(defun start (&key (address *address*) (port *port*) (verbose-p *verbose*))
+(defun start-server (&key (address *address*) (port *port*) (verbose-p *verbose*))
   (prog1 
       ;; FIXME: we need to set up a database connection pool somewhere
       ;; arround here
-      (setf *server*  (tbnl:start-server 
-                       :address address :port port 
-                       :dispatch-table (list #'cms-query-server-dispatch)
-                       :name "CMS QUERY SERVER"
-                       ))
+      (setf *server*
+            (make-instance 'query-acceptor
+                           :address address 
+                           :port port
+                           :name "CMS QUERY SERVER"))
+    (hunchentoot:start *server*)
     (when verbose-p 
       (format *trace-output* "~&Started query server on ~A port ~A~%" address port))))
 
 ;;; FIXME: make shure the server gets destroyed after shutdown
-(defun stop (&optional (server *server*))
+(defun stop-server (&optional (server *server*))
   "Stop the CMS Query Server."
   (if server
       (progn 
         ;; FIXME: destroy the database connection pool here
-        (tbnl:stop-server server)
+        (hunchentoot:stop server)
         (setf *server* nil))
       (warn "Server not running!")))
 
@@ -131,7 +110,7 @@ method combinations."))
   (cl-ppcre:register-groups-bind 
    (namespace local-name)
    ("{([^}]+)}(.+)" clark-name)
-    (list namespace local-name)))
+   (list namespace local-name)))
 
 (declaim (inline make-prop-node))
 (defun make-prop-node (clark-name value)
@@ -140,10 +119,10 @@ method combinations."))
   (cl-ppcre:register-groups-bind 
    (namespace local-name)
    ("{([^}]+)}(.+)" clark-name)
-    (dav:dav-node "prop" 
-   (dav::make-xmls-node :local-name local-name
-                   :namespace-uri namespace
-                   :children (list value)))))
+   (dav:dav-node "prop" 
+                 (dav::make-xmls-node :local-name local-name
+                                      :namespace-uri namespace
+                                      :children (list value)))))
 
 ;;; -->
 (declaim (inline make-resource-node))
@@ -164,39 +143,39 @@ method combinations."))
   (let ((uri (gensym))
         (prop-emitter                   ; Not used for now
          (loop for binding in (cms-query::bindings-of context)
-            ;; build a XMLS node structure
-            collect
-              `(("prop" . "DAV:") NIL
-                ((,(cms-query::name binding) . ,(cms-query::namespace binding)) NIL
-                 ,(cms-query::cname binding)))))
-    
+               ;; build a XMLS node structure
+               collect
+               `(("prop" . "DAV:") NIL
+                 ((,(cms-query::name binding) . ,(cms-query::namespace binding)) NIL
+                  ,(cms-query::cname binding)))))
+        
         ;; Arguments to the emitted Lambda form 
         (fun-args
          (loop for binding in
-              (cms-query::bindings-of context)
-            collect
-              (intern
-               (cms-query::cname binding)))))
+               (cms-query::bindings-of context)
+               collect
+               (intern
+                (cms-query::cname binding)))))
 
     ;; This is the code we emmit
     (compile NIL `(lambda (,uri ,@fun-args)
                     `(("response"  . "DAV:") NIL
                       (("href"     . "DAV:") NIL ,,uri)
                       (("propstat" . "DAV:")
-                      NIL
-;                       ,',@',(loop 
+                       NIL
+                                        ;                       ,',@',(loop 
                        ,,@(loop 
-                              for binding in (cms-query::bindings-of context)
-                              for namespace = (cms-query::namespace binding)
-                              for name  = (cms-query::name binding)
-                              for param = (intern (cms-query::cname binding))
-                              ;; for param = (cms-query::cname binding)
-                              ;; build a XMLS node structure
-                              collect
-                                 `(("prop" . "DAV:") NIL
-                                   ((,name . ,namespace) NIL
-                                    ,`,param ; <-- Wrong expansion, we need a komma more here!
-                                "Yers plain ol' dummy, sincerly") )))
+                                for binding in (cms-query::bindings-of context)
+                                for namespace = (cms-query::namespace binding)
+                                for name  = (cms-query::name binding)
+                                for param = (intern (cms-query::cname binding))
+                                ;; for param = (cms-query::cname binding)
+                                ;; build a XMLS node structure
+                                collect
+                                `(("prop" . "DAV:") NIL
+                                  ((,name . ,namespace) NIL
+                                   ,`,param ; <-- Wrong expansion, we need a komma more here!
+                                   "Yers plain ol' dummy, sincerly") )))
                       (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) 
     ))
 
@@ -208,8 +187,8 @@ a WebDAV propget response."
     (setf
      (header-out "Server") "CMS-Query-Server"
      (header-out "X-Handled-By") "handle-search-request"
-     (content-type) "text/xml; charset=utf-8"
-     (return-code) +http-multi-status+)
+     (content-type*) "text/xml; charset=utf-8"
+     (return-code*) +http-multi-status+)
 
     ;; FIXME: add error handling
     (let* ((*read-eval* NIL))
@@ -221,20 +200,20 @@ a WebDAV propget response."
     
     (with-output-to-string (s)
       (clsql:with-database (db *query-database* :pool t :make-default nil)
-          (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t :database db)
-            (format s "<?xml version='1.0' encoding='utf-8' ?>
+        (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t :database db)
+          (format s "<?xml version='1.0' encoding='utf-8' ?>
 <D:multistatus xmlns:D='DAV:'>~%")
-            (loop for tuple in tuples
-               do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:propstat>~%<D:prop>" (first tuple))
-                          (loop for value in (rest tuple) and
-                             fname in (rest fields)
-                             do (destructuring-bind (ns name) (clark-to-ns-name fname)
-                                  (format s "~&<~A xmlns='~a'>~a</~A>" name ns (hunchentoot:escape-for-html value) name)))
-                          (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:propstat>~%</D:response>")))
-            (format s "</D:multistatus>")))
+          (loop for tuple in tuples
+                do (progn  (format s "~&<D:response>~&<D:href>~A</D:href>~%<D:propstat>~%<D:prop>" (first tuple))
+                           (loop for value in (rest tuple) and
+                                 fname in (rest fields)
+                                 do (destructuring-bind (ns name) (clark-to-ns-name fname)
+                                      (format s "~&<~A xmlns='~a'>~a</~A>" name ns (hunchentoot:escape-for-html value) name)))
+                           (format s "~&</D:prop>~%<D:status>HTTP/1.1 200 OK</D:status>~%</D:propstat>~%</D:response>")))
+          (format s "</D:multistatus>")))
       s)))
 
-  
+
 
 
 #-DEPLOYMENT 
@@ -244,38 +223,51 @@ a WebDAV propget response."
   (setf
    (header-out "Server") "CMS-Query-Server"
    (header-out "X-Handled-By") "mokup-handler"
-   (content-type) "text/xml; charset=utf-8"
-   (return-code) +http-multi-status+)
+   (content-type*) "text/xml; charset=utf-8"
+   (return-code*) +http-multi-status+)
 
+  (unless nil
+    (format  nil "<html><body><h1>It works!</h1></body></html>")
+    (return))
   ;;; Read the query from the POST data ...
   ;;; FIXME: this (setf (tbnl:reply-external-format) "UTF-8") doesn't
   ;;; work.
 
+
   (let* ((*read-eval* NIL)
-         (query    (cms-query::compile-query  (read (tbnl:raw-post-data  :want-stream t))))
-         (context  (make-instance 'cms-query::compiler-context))
-         sql-query dummy-tuple formatter
+         (query   "")  ;(cms-query::compile-query  (read (tbnl:raw-post-data  :want-stream t)))
+         ;(context  (make-instance 'cms-query::compiler-context))
+         ; sql-query dummy-tuple formatter
          ;; (response (tbnl:send-headers))
-         )
+           )
     
     ;; Setup the compiler context
-    (cms-query::scan-opcode query context)
+    ;(cms-query::scan-opcode query context)
     ;; Now we should have collected all bindings as well as all table
     ;; names, hence we can compile a result formatter
-    (setf formatter (compile-webdav-formatter query context))
+    ; (setf formatter (compile-webdav-formatter query context))
     
     ;; Create a dummy value list
     (setf dummy-tuple (loop for val from 1 to (length (cms-query::bindings-of context))
-                         collect (format NIL "value-~a" val)))
+                            collect (format NIL "value-~a" val)))
     
     (loop for resource from 1 to 24 ; or, (random 256) for that matter ...
-       collect (apply formatter (format NIL "/cms/work/2007/resource-~A" resource) dummy-tuple)
-       into result 
-       finally (return  (sb-ext:octets-to-string 
-                         (cl-webdav:serialize-xmls-node (apply #'cl-webdav:dav-node "multistatus" result))
-                         :external-format :utf-8))
-         )))
+          collect (apply formatter (format NIL "/cms/work/2007/resource-~A" resource) dummy-tuple)
+          into result 
+          finally (return  (sb-ext:octets-to-string 
+                            (cl-webdav:serialize-xmls-node (apply #'cl-webdav:dav-node "multistatus" result))
+                            :external-format :utf-8))
+          )))
 
+(defun test-handler ()
+  "Mokup handler to emit fake query responses"
+
+  (setf
+   (header-out "Server") "CMS-Query-Server"
+   (header-out "X-Handled-By") "mokup-handler"
+   (content-type*) "text/html; charset=utf-8"
+   (return-code*) +http-ok+)
+  (format nil  "<html><body><h1>It still works!</h1></body></html>"))
 
 ;;;; *************************************************************************
 ;;;; This program is free software; you can redistribute it and/or modify
