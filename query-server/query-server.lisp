@@ -82,7 +82,10 @@ Returns a tabualted list of results."))
             (make-instance 'query-acceptor
                            :address address 
                            :port port
-                           :name "CMS QUERY SERVER"))
+                           :name "CMS QUERY SERVER"
+                           :ACCESS-LOG-DESTINATION *standard-output*
+                           :MESSAGE-LOG-DESTINATION *error-output*
+))
     (hunchentoot:start *server*)
     (when verbose-p 
       (format *trace-output* "~&Started query server on ~A port ~A~%" address port))))
