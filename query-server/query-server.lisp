@@ -226,26 +226,21 @@ a WebDAV propget response."
    (content-type*) "text/xml; charset=utf-8"
    (return-code*) +http-multi-status+)
 
-  (unless nil
-    (format  nil "<html><body><h1>It works!</h1></body></html>")
-    (return))
   ;;; Read the query from the POST data ...
   ;;; FIXME: this (setf (tbnl:reply-external-format) "UTF-8") doesn't
   ;;; work.
 
-
   (let* ((*read-eval* NIL)
-         (query   "")  ;(cms-query::compile-query  (read (tbnl:raw-post-data  :want-stream t)))
-         ;(context  (make-instance 'cms-query::compiler-context))
-         ; sql-query dummy-tuple formatter
-         ;; (response (tbnl:send-headers))
-           )
+         (query     (cms-query::compile-query  (read (tbnl:raw-post-data  :want-stream t))))
+         (context  (make-instance 'cms-query::compiler-context))
+         sql-query dummy-tuple formatter
+         (response (tbnl:send-headers)))
     
     ;; Setup the compiler context
-    ;(cms-query::scan-opcode query context)
+    (cms-query::scan-opcode query context)
     ;; Now we should have collected all bindings as well as all table
     ;; names, hence we can compile a result formatter
-    ; (setf formatter (compile-webdav-formatter query context))
+    (setf formatter (compile-webdav-formatter query context))
     
     ;; Create a dummy value list
     (setf dummy-tuple (loop for val from 1 to (length (cms-query::bindings-of context))
