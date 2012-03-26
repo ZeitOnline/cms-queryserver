@@ -87,7 +87,7 @@ Returns a tabualted list of results."))
                            :MESSAGE-LOG-DESTINATION *error-output*))
     (hunchentoot:start *server*)
     (when verbose-p 
-      (hunchentoot:log-message* :info "~&Started query server on ~A port ~A~%" address port))))
+      (format *error-output* "~&Started query server on ~A port ~A~%" address port))))
 
 ;;; FIXME: make shure the server gets destroyed after shutdown
 (defun stop-server (&optional (server *server*))
@@ -95,7 +95,7 @@ Returns a tabualted list of results."))
   (if server
       (progn 
         ;; FIXME: destroy the database connection pool here
-        (hunchentoot:log-message* :info "~&Stopping query server on ~A port ~A~%" address port)
+        (format *error-output* "~&Stopping query server on ~A port ~A~%" address port)
         (hunchentoot:stop server)
         (setf *server* nil))
       (warn "Server not running!")))
