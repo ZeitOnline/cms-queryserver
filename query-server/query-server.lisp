@@ -19,12 +19,12 @@
 (in-package :cms-query)
 
 (defvar *server*  NIL)
-(defvar *port*    9876)
+(defvar *port*    9876)                 ; or 9999 for production code
 (defvar *verbose* T)
 (defvar *address* "localhost")
 (defvar *last-query* NIL)
 (defvar *database-pool* NIL "Default database connection pool")
-(defvar *query-database* '("localhost" "cms" "postgres" "" 6543) "Connection spec fot the backend database") ; FIXME: use correct value here
+(defvar *query-database* '("localhost" "cms" "postgres" "") "Connection spec fot the backend database")
 
 
 ;;; Our Application Class
@@ -84,11 +84,10 @@ Returns a tabualted list of results."))
                            :port port
                            :name "CMS QUERY SERVER"
                            :ACCESS-LOG-DESTINATION *standard-output*
-                           :MESSAGE-LOG-DESTINATION *error-output*
-))
+                           :MESSAGE-LOG-DESTINATION *error-output*))
     (hunchentoot:start *server*)
     (when verbose-p 
-      (format *trace-output* "~&Started query server on ~A port ~A~%" address port))))
+      (hunchentoot:log-message* :info "~&Started query server on ~A port ~A~%" address port))))
 
 ;;; FIXME: make shure the server gets destroyed after shutdown
 (defun stop-server (&optional (server *server*))
@@ -96,6 +95,7 @@ Returns a tabualted list of results."))
   (if server
       (progn 
         ;; FIXME: destroy the database connection pool here
+        (hunchentoot:log-message* :info "~&Stopping query server on ~A port ~A~%" address port)
         (hunchentoot:stop server)
         (setf *server* nil))
       (warn "Server not running!")))
