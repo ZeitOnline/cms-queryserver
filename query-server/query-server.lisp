@@ -24,7 +24,7 @@
 (defvar *address* "localhost")
 (defvar *last-query* NIL)
 (defvar *database-pool* NIL "Default database connection pool")
-(defvar *query-database* '("localhost" "cms" "postgres" "") "Connection spec fot the backend database")
+(defvar *query-database* '("localhost" "cms" "postgres" "" 6543) "Connection spec fot the backend database") ; FIXME: use correct value here
 
 
 ;;; Our Application Class
@@ -188,18 +188,17 @@ a WebDAV propget response."
   (let (query sql-query)
     
     (setf
-     (header-out "Server") "CMS-Query-Server"
+     (header-out "Server")       "CMS-Query-Server"
      (header-out "X-Handled-By") "handle-search-request"
-     (content-type*) "text/xml; charset=utf-8"
-     (return-code*) +http-multi-status+)
+     (content-type*)             "text/xml; charset=utf-8"
+     (return-code*)               +http-multi-status+)
 
     ;; FIXME: add error handling
     (let* ((*read-eval* NIL))
       (setf query (read (tbnl:raw-post-data  :want-stream t))))
     
     (setf sql-query (sql-compile (compile-sql (compile-query query))))
-    ;; (warn "SQL: ~A" sql-query)
-    (setf (reply-external-format)  (flex:make-external-format :utf-8 :eol-style :lf))
+    (setf (reply-external-format*)  (flex:make-external-format :utf-8 :eol-style :lf))
     
     (with-output-to-string (s)
       (clsql:with-database (db *query-database* :pool t :make-default nil)
@@ -261,10 +260,11 @@ a WebDAV propget response."
   "Mokup handler to emit fake query responses"
 
   (setf
-   (header-out "Server") "CMS-Query-Server"
+   (header-out "Server")       "CMS-Query-Server"
    (header-out "X-Handled-By") "mokup-handler"
-   (content-type*) "text/html; charset=utf-8"
-   (return-code*) +http-ok+)
+   (content-type*)             "text/html; charset=utf-8"
+   (return-code*)               +http-ok+)
+  
   (format nil  "<html><body><h1>It still works!</h1></body></html>"))
 
 ;;;; *************************************************************************
