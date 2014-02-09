@@ -1,0 +1,83 @@
+#!/usr/bin/make -f
+
+pkg	:= cms-queryd
+debpkg  := cms-queryd
+
+DESTDIR	:= debian/$(debpkg)
+
+# Some configuration:
+QUICKLISP_SEED := http://beta.quicklisp.org/quicklisp.lisp
+SB_DAEMON_ZIP  := https://github.com/nikodemus/sb-daemon/archive/master.zip
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	# Add here commands to configure the package.
+	touch configure-stamp
+
+quicklisp:
+	curl -O $(QUICKLISP_SEED)
+	sbcl --non-interactive --no-userinit --load quicklisp.lisp \
+	--eval "(quicklisp-quickstart:install :path (merge-pathnames \"quicklisp/\" (directory-namestring (truename *default-pathname-defaults*))))"
+	(cd quicklisp/local-projects/ && wget -O sb-daemon.zip $(SB_DAEMON_ZIP) && unzip sb-daemon.zip)
+	ln -s `pwd` quicklisp/local-projects/
+	touch quicklisp-stamp
+
+clean-quicklisp:
+	-rm quicklisp.lisp
+	-rm -Rf "quicklisp/"
+	-rm quicklisp-stamp
+
+build: build-stamp quicklisp-stamp
+
+build-stamp: configure-stamp
+	dh_testdir
+	# Add here commands to compile the package.
+	sbcl --script build-queryserver.lisp
+	touch build-stamp
+
+clean: clean-quicklisp
+	dh_testdir
+	dh_testroot
+	rm -f quicklisp-stamp build-stamp configure-stamp
+	# Add here commands to clean up after the build process.
+	rm -f debian/cms-queryd.postinst.* debian/cms-queryd.prerm.*
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+
+	# Add here commands to install the package into debian/ppcre.
+	dh_installdirs $(clc-systems) $(clc-hunchentoot)
+	dh_install
+	dh_installinit --remove-d
+
+# Build architecture-independent files here.
+binary-indep: build install
+
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+#	dh_installdebconf
+#	dh_installinit
+#	dh_installman
+#	dh_installinfo
+	dh_installdocs
+#	dh_installchangelogs -k CHANGELOG
+#	dh_strip
+	dh_compress
+	dh_fixperms
+#	dh_makeshlibs
+	dh_installdeb
+#	dh_perl
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

@@ -4,14 +4,14 @@
 ;;;;
 ;;;; Name:     query-server.lisp
 ;;;; Purpose:  Implements the main server
-;;;; Author:   Ralf Mattes 
+;;;; Author:   Ralf Mattes
 ;;;; Created:  2007-08-22
 ;;;; Version:  $Id$
 ;;;; Copyright 2007 Ralf Mattes
 ;;;;           Full licence at end of file.
 ;;;; Commentary:
 ;;;;
-;;;; 
+;;;;
 ;;;;
 ;;;; *************************************************************************
 
@@ -37,7 +37,9 @@
   (funcall  (ecase (tbnl:request-method request)
               (:search 'handle-search-request)
               (:post   'mockup-handler)
-              (:get    'test-handler))))
+;;              (:get    'test-handler)
+              (:get    'handle-interactive-request)
+              )))
 
 
 (defgeneric handle-interactive-request ()
@@ -51,51 +53,49 @@ Returns a tabualted list of results."))
   "Returns a HTML formated response"
   (let ((query (or (post-parameter "query") ""))
         (has-query (post-parameter "query")))
-    (warn "Got query ~A" (read-from-string  query))
-    (with-output-to-string (s) 
+    (with-output-to-string (s)
       (cl-who:with-html-output (*standard-output* s :indent t)
         (:div :class "formcontainer"
               (:form :method :post :enctype "multipart/form-data"  ;:action ""
                      (:div :class "formpostfield"
-                           (:p "Query:" 
-                               (:br) 
-                               (:textarea :name "query" :rows 10 :cols 30  (cl-who:str query)
-                                          )))
+                           (:p "Query:"
+                               (:br)
+                               (:textarea :name "query" :rows 10 :cols 30  (cl-who:str query))))
                      (:div :class "formsubmitfield"
                            (:input :type :reset))
                      (:div :class "formsubmitfield"
                            (:input :type :submit))
-                     (:dic :class "pp-query" 
-                           (:p  
-                            (cl-who:fmt "~S"  
-                                        (if has-query 
-                                            (cms-query::find-resources (read-from-string query)) 
+                     (:div :class "pp-query"
+                           (:p
+                            (cl-who:fmt "~S"
+                                        (if has-query
+                                            (cms-query::find-resources (read-from-string query))
                                             "No query found"))))))))))
 
 
 ;;; Main entry point: the following functions start/stop the server
 (defun start-server (&key (address *address*) (port *port*) (verbose-p *verbose*))
-  (prog1 
+  (prog1
       ;; FIXME: we need to set up a database connection pool somewhere
       ;; arround here
       (setf *server*
             (make-instance 'query-acceptor
-                           :address address 
+                           :address address
                            :port port
                            :name "CMS QUERY SERVER"
                            :ACCESS-LOG-DESTINATION *standard-output*
                            :MESSAGE-LOG-DESTINATION *error-output*))
     (hunchentoot:start *server*)
-    (when verbose-p 
+    (when verbose-p
       (format *error-output* "~&Started query server on ~A port ~A~%" address port))))
 
 ;;; FIXME: make shure the server gets destroyed after shutdown
 (defun stop-server (&optional (server *server*))
   "Stop the CMS Query Server."
   (if server
-      (progn 
+      (progn
         ;; FIXME: destroy the database connection pool here
-        (format *error-output* "~&Stopping query server on ~A port ~A~%" address port)
+        (format *error-output* "~&Stopping query server on ~A port ~A~%" *address* *port*)
         (hunchentoot:stop server)
         (setf *server* nil))
       (warn "Server not running!")))
@@ -110,19 +110,19 @@ Returns a tabualted list of results."))
 
 (declaim (inline clark-to-ns-name))
 (defun clark-to-ns-name (clark-name)
-  (cl-ppcre:register-groups-bind 
+  (cl-ppcre:register-groups-bind
    (namespace local-name)
    ("{([^}]+)}(.+)" clark-name)
    (list namespace local-name)))
 
 (declaim (inline make-prop-node))
 (defun make-prop-node (clark-name value)
-  "Generate a XMLS node for the property with 
+  "Generate a XMLS node for the property with
    the given Clark name and value"
-  (cl-ppcre:register-groups-bind 
+  (cl-ppcre:register-groups-bind
    (namespace local-name)
    ("{([^}]+)}(.+)" clark-name)
-   (dav:dav-node "prop" 
+   (dav:dav-node "prop"
                  (dav::make-xmls-node :local-name local-name
                                       :namespace-uri namespace
                                       :children (list value)))))
@@ -151,8 +151,8 @@ Returns a tabualted list of results."))
                `(("prop" . "DAV:") NIL
                  ((,(cms-query::name binding) . ,(cms-query::namespace binding)) NIL
                   ,(cms-query::cname binding)))))
-        
-        ;; Arguments to the emitted Lambda form 
+
+        ;; Arguments to the emitted Lambda form
         (fun-args
          (loop for binding in
                (cms-query::bindings-of context)
@@ -166,8 +166,8 @@ Returns a tabualted list of results."))
                       (("href"     . "DAV:") NIL ,,uri)
                       (("propstat" . "DAV:")
                        NIL
-                                        ;                       ,',@',(loop 
-                       ,,@(loop 
+                                        ;                       ,',@',(loop
+                       ,,@(loop
                                 for binding in (cms-query::bindings-of context)
                                 for namespace = (cms-query::namespace binding)
                                 for name  = (cms-query::name binding)
@@ -179,14 +179,14 @@ Returns a tabualted list of results."))
                                   ((,name . ,namespace) NIL
                                    ,`,param ; <-- Wrong expansion, we need a komma more here!
                                    "Yers plain ol' dummy, sincerly") )))
-                      (("status" .  "DAV:") NIL "HTTP/1.1 200 OK")))) 
+                      (("status" .  "DAV:") NIL "HTTP/1.1 200 OK"))))
     ))
 
 (defun handle-search-request ()
   "Handler that queries the matadata store and returns
 a WebDAV propget response."
   (let (query sql-query)
-    
+
     (setf
      (header-out "Server")       "CMS-Query-Server"
      (header-out "X-Handled-By") "handle-search-request"
@@ -196,10 +196,10 @@ a WebDAV propget response."
     ;; FIXME: add error handling
     (let* ((*read-eval* NIL))
       (setf query (read (tbnl:raw-post-data  :want-stream t))))
-    
+
     (setf sql-query (sql-compile (compile-sql (compile-query query))))
     (setf (reply-external-format*)  (flex:make-external-format :utf-8 :eol-style :lf))
-    
+
     (with-output-to-string (s)
       (clsql:with-database (db *query-database* :pool t :make-default nil)
         (multiple-value-bind (tuples fields) (clsql:query sql-query :flatp t :database db)
@@ -218,7 +218,7 @@ a WebDAV propget response."
 
 
 
-#-DEPLOYMENT 
+#-DEPLOYMENT
 (defun mockup-handler ()
   "Mokup handler to emit fake query responses"
 
@@ -237,21 +237,21 @@ a WebDAV propget response."
          (context  (make-instance 'cms-query::compiler-context))
          sql-query dummy-tuple formatter
          (response (tbnl:send-headers)))
-    
+
     ;; Setup the compiler context
     (cms-query::scan-opcode query context)
     ;; Now we should have collected all bindings as well as all table
     ;; names, hence we can compile a result formatter
     (setf formatter (compile-webdav-formatter query context))
-    
+
     ;; Create a dummy value list
     (setf dummy-tuple (loop for val from 1 to (length (cms-query::bindings-of context))
                             collect (format NIL "value-~a" val)))
-    
+
     (loop for resource from 1 to 24 ; or, (random 256) for that matter ...
           collect (apply formatter (format NIL "/cms/work/2007/resource-~A" resource) dummy-tuple)
-          into result 
-          finally (return  (sb-ext:octets-to-string 
+          into result
+          finally (return  (sb-ext:octets-to-string
                             (cl-webdav:serialize-xmls-node (apply #'cl-webdav:dav-node "multistatus" result))
                             :external-format :utf-8))
           )))
@@ -264,7 +264,7 @@ a WebDAV propget response."
    (header-out "X-Handled-By") "mokup-handler"
    (content-type*)             "text/html; charset=utf-8"
    (return-code*)               +http-ok+)
-  
+
   (format nil  "<html><body><h1>It still works!</h1></body></html>"))
 
 ;;;; *************************************************************************

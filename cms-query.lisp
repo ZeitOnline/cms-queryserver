@@ -78,7 +78,7 @@ parsing to the containing opcode or NIL.")
   (:documentation ""))
 
 (defclass constraint (opcode)
-  ((table-name :accessor table-name-of) 
+  ((table-name :accessor table-name-of)
    (cname      :initarg  :cname        :accessor cname-of)
    (name       :initarg  :name         :accessor name-of)
    (namespace  :initarg  :namespace    :accessor namespace-of))
@@ -137,7 +137,7 @@ parsing to the containing opcode or NIL.")
   (:documentation "Match a value in the range [FROM TO]"))
 
 (defun make-range-constraint (namespace name from to)
-  (make-instance 'range-constraint 
+  (make-instance 'range-constraint
 		 :namespace namespace
 		 :name name
 		 :from from
@@ -149,13 +149,13 @@ parsing to the containing opcode or NIL.")
 
 (defun make-member-constraint (namespace name &rest values)
   (warn "Selecting in ~A" values)
-  (make-instance 'member-constraint 
-                 :namespace namespace 
-                 :name name 
+  (make-instance 'member-constraint
+                 :namespace namespace
+                 :name name
                  :values values))
 
 
-;;; The query compiler  
+;;; The query compiler
 (defclass compiler-context ()
   ((stack           :accessor opcode-stack      :initform ())
    (tables          :accessor tables-of         :initform ())
@@ -218,7 +218,7 @@ parsing to the containing opcode or NIL.")
 
 where <p-list>  is a list of (uri <qualified field names>+)
 and <table-chain> a sequence of  (:select <preds> <binders>)
-joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table-name <right>) uri)) 
+joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table-name <right>) uri))
 |#
 
 ;;; collect-p-list is a helper function to generate a projection list,
@@ -243,7 +243,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   ;;; Technically speaking keywordp is wrong but it eases development
   ;;; for now.
 ;;(assert (and (listp query) (keywordp (car query))) (query)
-;;           'cms-malformed-query 
+;;           'cms-malformed-query
 ;;           :explanation "Your query doesn't seem to be a valid query")
 
   (ecase (intern (symbol-name (opcode query)) (load-time-value (find-package :keyword)))
@@ -256,7 +256,9 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
     (:is (apply #'make-filter-constraint := (opargs query)))
     (:eq (apply #'make-filter-constraint := (opargs query)))
     (:gt (apply #'make-filter-constraint :> (opargs query)))
+    (:gt-or-eq (apply #'make-filter-constraint :>= (opargs query)))
     (:lt (apply #'make-filter-constraint :< (opargs query)))
+    (:lt-or-eq (apply #'make-filter-constraint :<= (opargs query)))
     (:bind (apply  #'make-binding-constraint (opargs query)))
     (:member  (apply  #'make-member-constraint (opargs query)))
     (:between (apply #'make-range-constraint (opargs query)))))
@@ -332,22 +334,22 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   `(:raw ,(format NIL "\"~a\"" thing)))
 
 (defun generate-plist (bindings uri-source)
-  (loop for (table alias) in bindings 
-     collect `(:as (:dot (:raw ,table) value) ,(sql-escape-field alias)) 
+  (loop for (table alias) in bindings
+     collect `(:as (:dot (:raw ,table) value) ,(sql-escape-field alias))
      into plist
      finally (return plist)))
 
 (defun generate-constraint-list (constraints)
-  (loop with clist = (list) 
-     for (this . that) on (reverse constraints) 
+  (loop with clist = (list)
+     for (this . that) on (reverse constraints)
      ;; do (warn "Processing ~A ~A" this that)
      when that ; not the first constraint
-     do (progn            
-          (push `(:= (:dot ,(sql-escape-field (table-name-of (car that))) uri ) 
+     do (progn
+          (push `(:= (:dot ,(sql-escape-field (table-name-of (car that))) uri )
                      (:dot ,(sql-escape-field (table-name-of this)) uri)) clist)
           (push :on  clist))
      do (push (generate-sql this) clist)
-     when that 
+     when that
      do (push :inner-join clist)
      finally (return clist)))
 
@@ -358,21 +360,21 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 (defmethod generate-sql ((node binding-constraint))
   `(:as (:select uri value
-                 :from facts 
+                 :from facts
                  :where (:and (:= namespace ,(namespace-of node))
-                              (:= name ,(name-of node)))) 
+                              (:= name ,(name-of node))))
         (:raw ,(table-name-of node))))
 
 (defmethod generate-sql ((node filter-constraint))
   `(:as (:select uri
-                 :from facts 
+                 :from facts
                  :where (:and (:= namespace ,(namespace-of node))
                               (:= name ,(name-of node))
                               (:= value ,(value-of node))))
         (:raw ,(table-name-of node))))
 (defmethod generate-sql ((node lt-constraint))
   `(:as (:select uri
-                 :from facts 
+                 :from facts
                  :where (:and (:= namespace ,(namespace-of node))
                               (:= name ,(name-of node))
                               (:< value ,(value-of node))))
@@ -380,7 +382,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 (defmethod generate-sql ((node gt-constraint))
   `(:as (:select uri
-                 :from facts 
+                 :from facts
                  :where (:and (:= namespace ,(namespace-of node))
                               (:= name ,(name-of node))
                               (:> value ,(value-of node))))
@@ -388,7 +390,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 (defmethod generate-sql ((node range-constraint))
   `(:as (:select uri
-                 :from facts 
+                 :from facts
                  :where (:and (:= namespace ,(namespace-of node))
                               (:= name ,(name-of node))
                               (:> value ,(lower-bound node))
@@ -397,7 +399,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
 (defmethod generate-sql ((node member-constraint))
   `(:as (:select uri
-                 :from facts 
+                 :from facts
                  :where (:and (:= namespace ,(namespace-of node))
                               (:= name ,(name-of node))
                               (:in value (:set ,@(values-of node)))))
@@ -421,9 +423,10 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
 
       (scan query)
       ;; debugging
-      `(:limit (:select  
-          (:dot ,(sql-escape-field (table-name-of (first (binders-of compiler-context)))) uri) 
-          ,@(generate-plist (bindings-of compiler-context) nil) 
+      ;; Return a-aql s-sexpression
+      `(:limit (:select
+          (:dot ,(sql-escape-field (table-name-of (first (binders-of compiler-context)))) uri)
+          ,@(generate-plist (bindings-of compiler-context) nil)
           :from ,@(generate-constraint-list (binders-of compiler-context))) ,*max-results-per-query*)
       )))
 
@@ -441,7 +444,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   (clsql:query (build-query specs)))
 
 ;;; Pretty-printing query
-(defun indent (depth) 
+(defun indent (depth)
   "Helper function for pretty-printing."
   (make-string depth :initial-element #\tab))
 
@@ -461,7 +464,7 @@ joined by :inner-join <left> :on (:= (:dot (table-name <left>) uri) (:dot (table
   (format T "~%~A ~A" (indent  level) (class-name (class-of query))))
 
 (defmethod pprint-query ((query relational-constraint) &optional (stream T)  (level 0))
-  (format T "~%~A ~A (resources where ~A ~A ~A" 
+  (format T "~%~A ~A (resources where ~A ~A ~A"
           (indent  level) (class-name (class-of query))
           (cname-of query) (pp-operator (operator-of query)) (value-of query)))
 

@@ -1,0 +1,13 @@
+Source: cms-queryd
+Section: devel
+Priority: optional
+Maintainer: Ralf Mattes <rm@seid-online.de>
+Build-Depends: debhelper (>= 4.0.0), wget
+Standards-Version: 3.7.2.0
+XS-Vcs-Darcs: http://sedi-online.de/darcs/cl-hunchentoot/
+
+Package: cms-queryd
+Architecture: amd64
+Depends: ${misc:Depends}
+Description: cms-queryd is a standalone server to answer
+ queries to the cms facts db.

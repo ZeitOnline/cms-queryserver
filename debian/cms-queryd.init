@@ -1,0 +1,66 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          cms-queryserver
+# Required-Start:    $local_fs $remote_fs $network postgresql
+# Required-Stop:     $local_fs $remote_fs $network postgresql
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# X-Interactive:     true
+# Short-Description: Start/stop cms query server
+### END INIT INFO
+#
+# cms-queryserver       This init.d script is used to start the cms
+#                       queryserver.
+# 
+
+# Clean daemon path
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="CMS Query Server"
+NAME=cms-queryd
+DAEMON=/usr/local/bin/cms-queryd
+PIDFILE=/var/run/cms-query.pid
+SCRIPTNAME=/etc/init.d/$NAME
+
+if [ -x  $DAEMON ] ; then
+        HAVE_CMS_QUERYSERVER=1
+else
+        echo "Could not find an installed CMS Queryserver"
+        exit 0
+fi
+
+# We should run in a UTF-8 environment to get propper logging
+export LC_ALL=en_US.UTF-8
+
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
+
+# Load LSB init functions
+. /lib/lsb/init-functions
+
+
+case "$1" in
+   start)
+      echo -n "Starting CMS Query Server:"
+      start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON
+      echo "."
+        ;;
+   stop)
+      echo -n "Stopping CMS Query Server:"
+      start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE      
+      echo "."
+        ;;
+   restart|force-reload)
+      echo "Restarting CMS Query Server:"
+      start-stop-daemon --stop --quiet --oknodo --retry 30 --pidfile $PIDFILE
+      start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $DAEMON_OPTS
+      echo "."
+   ;;
+   *)
+      # echo "Usage: $N {start|stop|restart|reload|force-reload}" >&2
+      echo "Usage: $0 {action}" >&2
+      echo "   action = start|stop|restart|force-reload" >&2
+      exit 1
+   ;;
+esac
+
+exit 0

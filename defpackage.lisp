@@ -1,7 +1,7 @@
-(defpackage #:cms-query 
+(defpackage #:cms-query
   (:use :cl :s-sql :hunchentoot :cl-who)
   (:shadow :assert)
-  (:export 
+  (:export
    #:start-server
    #:stop-server
    #:compile-query
@@ -9,9 +9,11 @@
    #:*ns-map*
    #:find-resources
    #:register-namespace
-   #:run-query))
+   #:run-query
+   #:*address*
+   #:*port*))
 
-(defpackage #:cms-query-user 
-  (:use :cl 
+(defpackage #:cms-query-user
+  (:use :cl
         :cms-query)
   (:nicknames :cms))
