@@ -1,1 +1,12 @@
-*.fasl
+.vagrant/
+build/
+*.deb
+*-stamp
+quicklisp*
+debian/cms-queryd.debhelper.log
+debian/cms-queryd.postinst.debhelper
+debian/cms-queryd.postrm.debhelper
+debian/cms-queryd.prerm.debhelper
+debian/cms-queryd.substvars
+debian/cms-queryd/
+debian/files

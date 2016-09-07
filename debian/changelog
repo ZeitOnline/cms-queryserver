@@ -1,0 +1,13 @@
+cms-queryd (0.1.0-zeit2) unstable; urgency=low
+
+  * Fixed package build (removed dh_strip which eats
+    the attached sbcl core)
+
+ -- R. Mattes  <repository@buildit.zeit.de>  Wed, 08 Jan 2014 14:19:22 +0100
+
+cms-queryd (0.1.0-zeit1) unstable; urgency=low
+
+  * Initial (minimal) debian packaging
+
+ --  R. Mattes <repository@buildit.zeit.de>  Wed, 08 Jan 2014 14:18:30 +0100
+

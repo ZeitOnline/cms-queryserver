@@ -5,7 +5,10 @@ debpkg  := cms-queryd
 
 DESTDIR	:= debian/$(debpkg)
 
-# Some configuration:
+# XXX The lisp dependencies are not pinned, so quicklisp always retrieves the
+# lastest version. This means (currently) we need at least sbcl>=1.2, since
+# otherwise installing bordeaux-threads fails with "need at least asdf>=3.1",
+# due to syntax issues.
 QUICKLISP_SEED := http://beta.quicklisp.org/quicklisp.lisp
 SB_DAEMON_ZIP  := https://github.com/nikodemus/sb-daemon/archive/master.zip
 
@@ -15,11 +18,11 @@ configure-stamp:
 	# Add here commands to configure the package.
 	touch configure-stamp
 
-quicklisp:
+quicklisp-stamp:
 	curl -O $(QUICKLISP_SEED)
 	sbcl --non-interactive --no-userinit --load quicklisp.lisp \
 	--eval "(quicklisp-quickstart:install :path (merge-pathnames \"quicklisp/\" (directory-namestring (truename *default-pathname-defaults*))))"
-	(cd quicklisp/local-projects/ && wget -O sb-daemon.zip $(SB_DAEMON_ZIP) && unzip sb-daemon.zip)
+	(cd quicklisp/local-projects/ && curl -Lo sb-daemon.zip $(SB_DAEMON_ZIP) && unzip sb-daemon.zip)
 	ln -s `pwd` quicklisp/local-projects/
 	touch quicklisp-stamp
 
@@ -28,7 +31,7 @@ clean-quicklisp:
 	-rm -Rf "quicklisp/"
 	-rm quicklisp-stamp
 
-build: build-stamp quicklisp-stamp
+build: quicklisp-stamp build-stamp
 
 build-stamp: configure-stamp
 	dh_testdir
@@ -36,13 +39,16 @@ build-stamp: configure-stamp
 	sbcl --script build-queryserver.lisp
 	touch build-stamp
 
-clean: clean-quicklisp
+clean:
 	dh_testdir
 	dh_testroot
-	rm -f quicklisp-stamp build-stamp configure-stamp
+	rm -f build-stamp configure-stamp
 	# Add here commands to clean up after the build process.
 	rm -f debian/cms-queryd.postinst.* debian/cms-queryd.prerm.*
 	dh_clean
+
+distclean: clean-quicklisp
+	rm -f quicklisp-stamp
 
 install: build
 	dh_testdir
@@ -81,3 +87,6 @@ binary-arch: build install
 
 binary: binary-indep binary-arch
 .PHONY: build clean binary-indep binary-arch binary install configure
+
+override_dh_builddeb:
+	dh_builddeb -- -Zgzip
