@@ -21,7 +21,7 @@
 (defvar *server*  NIL)
 (defvar *port*    9999)
 (defvar *verbose* T)
-(defvar *address* "localhost")
+(defvar *address* "0.0.0.0")
 (defvar *last-query* NIL)
 (defvar *database-pool* NIL "Default database connection pool")
 (defvar *query-database* '("localhost" "cms" "postgres" "") "Connection spec fot the backend database")
