@@ -19,7 +19,7 @@
 (in-package :cms-query)
 
 (defvar *server*  NIL)
-(defvar *port*    9876)                 ; or 9999 for production code
+(defvar *port*    9999)
 (defvar *verbose* T)
 (defvar *address* "localhost")
 (defvar *last-query* NIL)
