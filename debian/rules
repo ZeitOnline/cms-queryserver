@@ -39,16 +39,13 @@ build-stamp: configure-stamp
 	sbcl --script build-queryserver.lisp
 	touch build-stamp
 
-clean:
+clean: clean-quicklisp
 	dh_testdir
 	dh_testroot
-	rm -f build-stamp configure-stamp
+	rm -f quicklisp-stamp build-stamp configure-stamp
 	# Add here commands to clean up after the build process.
 	rm -f debian/cms-queryd.postinst.* debian/cms-queryd.prerm.*
 	dh_clean
-
-distclean: clean-quicklisp
-	rm -f quicklisp-stamp
 
 install: build
 	dh_testdir
