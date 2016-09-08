@@ -23,17 +23,14 @@
   (cl-syslog:log "cms-queryd" :daemon level (apply #'format nil "[~A] ~?" level message (list  args))))
 
 (defun main ()
-  (let ((-done- nil)
-        (log-path #p"/tmp/")
-        (run-path #p"/tmp/")
-        (pid-file #p"cms-queryd.pid"))
+  (let ((-done- nil))
     (flet ((signal-handler  (signal)
              (format t "~A received~%" signal)
              (setf -done- t)))
       (sb-daemon:daemonize :exit-parent t
-                           :output  (merge-pathnames "stdout.log" log-path)
-                           :error   (merge-pathnames "stderr.log" log-path)
-                           :pidfile (merge-pathnames pid-file run-path)
+                           :output  #p"/var/log/cms-query/access.log"
+                           :error   #p"/var/log/cms-query/error.log"
+                           :pidfile #p"/var/run/cms-query.pid"
                            :sigterm #'signal-handler
                            :sigabrt #'signal-handler
                            :sighup  #'signal-handler
