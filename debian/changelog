@@ -1,3 +1,10 @@
+cms-queryd (1.0.0-zeit2) xenial; urgency=medium
+
+  * Listen on all hosts, set production port 9999, fix logfile locations
+  * Use Ubuntu-10 compatible compression
+
+ -- Wolfgang Schnerring <wolfgang.schnerring@zeit.de>  Wed, 14 Sep 2016 13:30:43 +0200
+
 cms-queryd (1.0.0-zeit1) xenial; urgency=medium
 
   * Make packaging work with Ubuntu-14
